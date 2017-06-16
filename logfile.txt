@@ -1,0 +1,9 @@
+Here we will record the updates and daily work:
+6.14 meeting. Read up on BFGS
+6.15 Read on Line Search Methods
+6.16 Euclidean version is done
+
+
+
+
+To do list:
