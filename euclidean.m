@@ -11,15 +11,15 @@ function euclidean (cost,grad,dim)
     memory = 10;
     
     %BFGS
-    x = ones(dim,1);
+    x = zeros(dim,1);
     k = 0;
     s = zeros(dim, memory); %represents x_k+1 - x_k
     y = zeros(dim, memory); %represents df_k+1 - df_k
-    
+    disp('here')
     while norm(grad(x)) > error
             %obtain the direction for line search
             p = -direction(s,y,grad(x),memory);
-            
+
             %Get the stepsize (Default to 1)
             alpha = linesearch(cost,grad,x,p,c1,c2);
             
