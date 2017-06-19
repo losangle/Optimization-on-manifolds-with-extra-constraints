@@ -7,3 +7,4 @@ Here we will record the updates and daily work:
 
 
 To do list:
+Add options for manifold.
