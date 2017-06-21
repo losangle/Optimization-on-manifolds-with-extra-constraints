@@ -1,4 +1,4 @@
-dim = 2000;
+dim = 1000;
 A = randn(dim,dim);
 A = A + A.';
 cost = @(x) (x'*A*x);
@@ -23,6 +23,14 @@ problem.egrad = grad;
  
 %disp(norm(grad(x)-x*(grad(x)'*x)))
 
+%bfgsManifold(problem);
+
+
+profile clear;
+profile on;
 bfgsManifold(problem);
+
 trustregions(problem);
+profile off;
+profile report
 steepestdescent(problem);
