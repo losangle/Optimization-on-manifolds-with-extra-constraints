@@ -61,8 +61,8 @@ function  [x, cost, info, options] = cacheSave(problem, x, options)
             
             
             %Get the stepsize (Default to 1)
-%             alpha = linesearch(problem,M,xCur,p,c1,c2,amax);
-            alpha = linesearchv2(problem,M,xCur,p);
+            alpha = linesearch(problem,M,xCur,p,c1,c2,amax);
+%            alpha = linesearchv2(problem,M,xCur,p);
                         
             %If step size is too small, there must be something wrong
 %             if (alpha < 1e-10)
@@ -184,7 +184,6 @@ function dir = directiondummy(M, sHistory,yHistory,xHistory,...
     dir = xgrad;
 end
 
-%BUG FIX.
 %This version follows Qi et al, 2010
 function alpha = linesearchv2(problem, M, x, p)
     %For bedugging. Shows phi(alpha)
