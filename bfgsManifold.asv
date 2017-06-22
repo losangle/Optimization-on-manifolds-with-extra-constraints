@@ -108,22 +108,18 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         
 %%%% -----------obtain the direction for line search----------------
         xCurGradient = newgrad;
-        scaleFactor = 1;
         if (k >= 1)
-            if (k >= options.memory)
-            scaleFactor = M.inner(xHistory{options.memory},yHistory{options.memory},sHistory{options.memory})/...
-                M.inner(xHistory{options.memory},yHistory{options.memory},yHistory{options.memory});
-            else
-            scaleFactor = M.inner(xHistory{k},yHistory{k},sHistory{k})/...
-                M.inner(xHistory{k},yHistory{k},yHistory{k});                
-            end
+            if (k >= memory)
+            scaleFactor = M.inner(xHistory(memory),yHistory(
         end
         if (k>=options.memory)
             negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,options.memory, scaleFactor);
+                xCur,xCurGradient,options.memory);
+
         else
             negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,k, scaleFactor);
+                xCur,xCurGradient,k);
+
         end
 
         %DEBUG only
@@ -288,7 +284,7 @@ end
 % TODO: unroll the function
 
 %Iteratively it returns the search direction based on memory.
-function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleFactor)
+function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter)
     if (iter ~= 0)        
         sk = sHistory{iter};
         yk = yHistory{iter};
@@ -306,13 +302,13 @@ function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleF
 %         disp(norm_xPrev/norm_xCur)
 %         tempAtxPrev = M.lincomb(xprev, norm_xPrev/norm_xCur, tempAtxPrev);
         tempAtxPrev = direction(M, sHistory,yHistory,xHistory,xprev,...
-            tempAtxPrev,iter-1,scaleFactor);
+            tempAtxPrev,iter-1);
         %transport the vector back
         tempAtxCur = M.transp(xprev,xCur,tempAtxPrev);
         dir = M.lincomb(xCur, 1, tempAtxCur,...
             -rhok*(M.inner(xCur,yk,tempAtxCur)-InProdOfskAndxCurGrad), sk);
     else
-        dir = M.lincomb(xCur, scaleFactor, xCurGrad);
+        dir = xCurGrad;
     end
 end
 
