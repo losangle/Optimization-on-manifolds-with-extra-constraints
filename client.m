@@ -1,9 +1,11 @@
-dim = 1000;
+dim = 6000;
 A = randn(dim,dim);
 A = A + A.';
 cost = @(x) (x'*A*x);
 grad = @(x) 2*A*x;
 
+% 
+% dim = 2;
 % cost = @(x) (1-x(1))^2+100*(x(2)-x(1)^2)^2;
 % grad = @(x) [-2*(1-x(1))+200*(x(2)-x(1)^2)*(-2*x(1));200*(x(2)-x(1)^2)];
 % 
@@ -28,9 +30,21 @@ problem.egrad = grad;
 
 profile clear;
 profile on;
-bfgsManifold(problem);
+[x, cost, info, options] = bfgsManifold(problem);
+    % Display some statistics.
+    figure;
+    semilogy([info.iter], [info.gradnorm], '.-');
+    xlabel('Iteration number - BFGS');
+    ylabel('Norm of the gradient of f');
+    
+    
+[x, cost, info, options] = trustregions(problem);
+    % Display some statistics.
+    figure;
+    semilogy([info.iter], [info.gradnorm], '.-');
+    xlabel('Iteration number - BFGS');
+    ylabel('Norm of the gradient of f');
+    
 
-trustregions(problem);
 profile off;
 profile report
-steepestdescent(problem);
