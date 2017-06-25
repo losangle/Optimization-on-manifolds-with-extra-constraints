@@ -23,7 +23,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     localdefaults.c1 = 0.0001;
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
-    localdefaults.memory = 5;
+    localdefaults.memory = 100;
     localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
@@ -108,14 +108,22 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         
 %%%% -----------obtain the direction for line search----------------
         xCurGradient = newgrad;
+        scaleFactor = 1;
+        if (k >= 1)
+            if (k >= options.memory)
+            scaleFactor = M.inner(xHistory{options.memory},yHistory{options.memory},sHistory{options.memory})/...
+                M.inner(xHistory{options.memory},yHistory{options.memory},yHistory{options.memory});
+            else
+            scaleFactor = M.inner(xHistory{k},yHistory{k},sHistory{k})/...
+                M.inner(xHistory{k},yHistory{k},yHistory{k});                
+            end
+        end
         if (k>=options.memory)
             negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,options.memory);
-
+                xCur,xCurGradient,options.memory, scaleFactor);
         else
             negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,k);
-
+                xCur,xCurGradient,k, scaleFactor);
         end
 
         %DEBUG only
@@ -126,9 +134,11 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         
 %%%% -----------%Get the stepsize (Default to 1)----------------        
         InnerProd_p_xCurGradient = M.inner(xCur,p,xCurGradient);
+
         
         if options.linesearchVersion == 0
             alpha = linesearchWolfe(problem,M,xCur,p,options.c1,options.c2,options.amax);
+            costNext = getCost(problem, M.retr(xCur, p ,alpha));
         else
             if options.restart == 1
                 if (InnerProd_p_xCurGradient > 0)
@@ -140,9 +150,15 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
             [costNext,changeDir,alpha] = linesearchv2(problem,M,xCur,p,InnerProd_p_xCurGradient,alpha);
             %stop the algorithm as step can not be taken. 
             if changeDir == 1
+                %Stop
                 alpha = 0;
+                %Restart
+%                 k = 0;
+%                 continue;
             end
         end
+        
+        
         newkey = storedb.getNewKey();
         lsstats = [];
         
@@ -214,8 +230,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         fprintf('Total time is %f [s] (excludes statsfun)\n', ...
                 info(end).time);
     end
-    
-    
+
     % Routine in charge of collecting the current iteration stats
     function stats = savestats()
         stats.iter = iter;
@@ -277,11 +292,10 @@ function correct = checkWolfe(problem,M,x,p,c1,c2,alpha)
     end
 end
 
-
 % TODO: unroll the function
 
 %Iteratively it returns the search direction based on memory.
-function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter)
+function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleFactor)
     if (iter ~= 0)        
         sk = sHistory{iter};
         yk = yHistory{iter};
@@ -299,13 +313,13 @@ function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter)
 %         disp(norm_xPrev/norm_xCur)
 %         tempAtxPrev = M.lincomb(xprev, norm_xPrev/norm_xCur, tempAtxPrev);
         tempAtxPrev = direction(M, sHistory,yHistory,xHistory,xprev,...
-            tempAtxPrev,iter-1);
+            tempAtxPrev,iter-1,scaleFactor);
         %transport the vector back
         tempAtxCur = M.transp(xprev,xCur,tempAtxPrev);
         dir = M.lincomb(xCur, 1, tempAtxCur,...
             -rhok*(M.inner(xCur,yk,tempAtxCur)-InProdOfskAndxCurGrad), sk);
     else
-        dir = xCurGrad;
+        dir = M.lincomb(xCur, scaleFactor, xCurGrad);
     end
 end
 
@@ -335,9 +349,10 @@ function [costNext,changeDir,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, 
     % Exp can't be retraction here.
     costNext = getCost(problem,M.exp(x,p,alpha));
     diff = costNext - costAtx;
-    while (diff>= 0.001*alpha*pTGradAtx)
+    while (diff>= 0.5*alpha*pTGradAtx)
         if (diff == 0)
             changeDir = 1;
+            l = logspace(-15,1,500);
             break;
         end
         alpha = 0.5 * alpha;

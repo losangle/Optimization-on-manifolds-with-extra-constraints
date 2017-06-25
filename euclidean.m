@@ -11,11 +11,13 @@ function euclidean (cost,grad,dim)
     memory = 10;
     
     %BFGS
-    x = zeros(dim,1);
+    x = randn(dim,1);
     k = 0;
     s = zeros(dim, memory); %represents x_k+1 - x_k
     y = zeros(dim, memory); %represents df_k+1 - df_k
     disp('here')
+    iter = 1;
+    hist(1) = norm(grad(x));
     while norm(grad(x)) > error
             %obtain the direction for line search
             p = -direction(s,y,grad(x),memory);
@@ -37,8 +39,14 @@ function euclidean (cost,grad,dim)
             disp(x)
             
             fprintf('Norm at iteration %d is %f\n', k, norm(grad(x)));
+            iter = iter + 1;
+            hist(iter) = norm(grad(x));
     end
     disp (cost(x))
+    figure;
+    semilogy(hist, '.-');
+    xlabel('Iteration number - BFGS');
+    ylabel('Norm of the gradient of f');
 end
 
 %Iteratively it returns the search direction based on memory.
