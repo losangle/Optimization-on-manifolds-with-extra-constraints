@@ -23,7 +23,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     localdefaults.c1 = 0.0001;
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
-    localdefaults.memory = 10;
+    localdefaults.memory = 100;
     localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
@@ -64,7 +64,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     newgrad = grad;
     
     if options.verbosity >= 2
-        fprintf(' iter\t               cost val\t    grad. norm\n    alpha');
+        fprintf(' iter\t               cost val\t    grad. norm\n');
     end
     
     %BFGS initialization
@@ -82,7 +82,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         
         % Display iteration information
         if options.verbosity >= 2
-            fprintf('%5d\t%+.16e\t%.8e\t%.3e\n', iter, cost, gradnorm, alpha);
+            fprintf('%5d\t%+.16e\t%.8e\n', iter, cost, gradnorm);
         end
         
         % Start timing this iteration
@@ -389,6 +389,7 @@ function alpha = linesearchWolfe(problem,M,x,p,c1,c2,amax)
 %     figure
 %     plot(steps,costs);
 %     xlabel('x')
+
     aprev = 0;
     acur = 1;
     i = 1;
@@ -401,12 +402,12 @@ function alpha = linesearchWolfe(problem,M,x,p,c1,c2,amax)
             return;
         end
         %MAYBE EXP is needed?
-        gradAtCur = diffRetractionSphere(problem, M, acur, p, xCur, M.retr(xCur, acur, p));
+        gradAtCur = M.inner(xCur,getGradient(problem,xCur),M.transp(x,xCur,p));
         if (abs(gradAtCur) <= -c2*gradAtZero)
             alpha = acur;
             return;
         end
-        if abs(gradAtCur) >= 0 %double check if abs is needed
+        if gradAtCur >= 0
             alpha = zoom(problem,M,acur,aprev,x,p,c1,c2);
             return;
         end
@@ -428,7 +429,7 @@ function alpha = zoom(problem,M,alo,ahi,x,p,c1,c2)
             ahi = anew;
         else    
             xNew = M.retr(x,p,anew);
-            gradAtAnew = diffRetractionSphere(problem, M, anew, p, x, xNew);
+            gradAtAnew = M.inner(xNew,getGradient(problem,xNew),M.transp(x,xNew,p));
             if abs(gradAtAnew) <= -c2*gradAtZero
                 alpha = anew;
                 return
@@ -440,8 +441,4 @@ function alpha = zoom(problem,M,alo,ahi,x,p,c1,c2)
         end
     end
     alpha = (alo+ahi)/2;
-end
-
-function slope = diffRetractionSphere(problem, M, alpha, p, xCur, xNext)
-    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
 end

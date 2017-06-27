@@ -23,7 +23,7 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
     localdefaults.c1 = 0.0001;
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
-    localdefaults.memory = 100;
+    localdefaults.memory = 10;
     localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
@@ -64,7 +64,7 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
     newgrad = grad;
     
     if options.verbosity >= 2
-        fprintf(' iter\t               cost val\t    grad. norm\n');
+        fprintf(' iter\t               cost val\t    grad. norm\n    alpha');
     end
     
     %BFGS initialization
@@ -75,6 +75,7 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
     
     M = problem.M;
     M.retr = @M.exp;
+    M.df = @diffRetractionSphere;
     
     alpha = 1;
     
@@ -82,7 +83,7 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
         
         % Display iteration information
         if options.verbosity >= 2
-            fprintf('%5d\t%+.16e\t%.8e\n', iter, cost, gradnorm);
+            fprintf('%5d\t%+.16e\t%.8e\t%.3e\n', iter, cost, gradnorm, alpha);
         end
         
         % Start timing this iteration
@@ -120,23 +121,17 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
                 M.inner(xHistory{k},yHistory{k},yHistory{k});                
             end
         end
-        if (k>=options.memory)
-            negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,options.memory, scaleFactor);
-        else
-            negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,k, scaleFactor);
-        end
+
+        negdir = direction(M, sHistory,yHistory,xHistory,...
+                xCur,xCurGradient,min(k,options.memory), scaleFactor);
 
         %DEBUG only
         %negdir = getGradient(problem, xCur);
         
         p = M.lincomb(xCur, -1, negdir);
         
-        
 %%%% -----------%Get the stepsize (Default to 1)----------------        
         InnerProd_p_xCurGradient = M.inner(xCur,p,xCurGradient);
-
         
         if options.linesearchVersion == 0
             alpha = linesearchWolfe(problem,M,xCur,p,options.c1,options.c2,options.amax);
@@ -172,7 +167,6 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
         sk = M.transp(xCur,xNext,M.lincomb(xCur, alpha, p));
         
         beta = M.norm(xCur, M.lincomb(xCur, alpha, p)) / M.norm(xNext, sk);
-        %fprintf('Beta = %f',beta);
         sk = M.lincomb(xNext, beta, sk);
         
         xCurGradient_TS_to_xNext = M.transp(xCur, xNext, xCurGradient);
@@ -191,19 +185,24 @@ function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
             checkCurvatureNext(M,xNext,sk,yk);
         end
         
-        if (k>=options.memory)
-            sHistory = sHistory([2:end 1]); %the most recent vector is on the right
-            sHistory{options.memory} = sk;
-            yHistory = yHistory([2:end 1]); %the most recent vector is on the right
-            yHistory{options.memory} = yk;
-            xHistory = xHistory([2:end 1]); %the most recent vector is on the right
-            xHistory{options.memory} = xCur;
-            k = k+1;
+        if (M.inner(xNext,sk,yk)/M.inner(xNext,sk,sk))>= xCurGradientNorm
+            if (k>=options.memory)
+                sHistory = sHistory([2:end 1]); %the most recent vector is on the right
+                sHistory{options.memory} = sk;
+                yHistory = yHistory([2:end 1]); %the most recent vector is on the right
+                yHistory{options.memory} = yk;
+                xHistory = xHistory([2:end 1]); %the most recent vector is on the right
+                xHistory{options.memory} = xCur;
+                k = k+1;
+            else
+                k = k+1;
+                sHistory{k} = sk;
+                yHistory{k} = yk;
+                xHistory{k} = xCur;
+            end
         else
-            k = k+1;
-            sHistory{k} = sk;
-            yHistory{k} = yk;
-            xHistory{k} = xCur;
+            fprintf('Restart\n');
+            k = 0;
         end
         
         % Compute the new cost-related quantities for x
@@ -318,12 +317,9 @@ function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleF
         tempAtxCur = M.lincomb(xCur, 1, xCurGrad, -rhok*InProdOfskAndxCurGrad, yk);
         %transport to the previous point.
         
-%         norm_xCur = M.norm(xCur, tempAtxCur);
         tempAtxPrev = M.transp(xCur,xprev, tempAtxCur);
         tempAtxPrev = M.lincomb(xprev, M.norm(xCur, tempAtxCur)/M.norm(xprev, tempAtxPrev), tempAtxPrev);
-%         norm_xPrev = M.norm(xprev, tempAtxPrev);
-%         disp(norm_xPrev/norm_xCur)
-%         tempAtxPrev = M.lincomb(xprev, norm_xPrev/norm_xCur, tempAtxPrev);
+
         tempAtxPrev = direction(M, sHistory,yHistory,xHistory,xprev,...
             tempAtxPrev,iter-1,scaleFactor);
         %transport the vector back
@@ -385,7 +381,6 @@ function [costNext,changeDir,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, 
 %             disp(newalpha);
 %         end
     end
-    fprintf('alpha = %.16e\n',alpha);    
 end
 
 
@@ -401,7 +396,6 @@ function alpha = linesearchWolfe(problem,M,x,p,c1,c2,amax)
 %     figure
 %     plot(steps,costs);
 %     xlabel('x')
-
     aprev = 0;
     acur = 1;
     i = 1;
@@ -414,12 +408,12 @@ function alpha = linesearchWolfe(problem,M,x,p,c1,c2,amax)
             return;
         end
         %MAYBE EXP is needed?
-        gradAtCur = M.inner(xCur,getGradient(problem,xCur),M.transp(x,xCur,p));
+        gradAtCur = diffRetractionSphere(problem, M, acur, p, xCur, M.retr(xCur, acur, p));
         if (abs(gradAtCur) <= -c2*gradAtZero)
             alpha = acur;
             return;
         end
-        if gradAtCur >= 0
+        if abs(gradAtCur) >= 0 %double check if abs is needed
             alpha = zoom(problem,M,acur,aprev,x,p,c1,c2);
             return;
         end
@@ -441,7 +435,7 @@ function alpha = zoom(problem,M,alo,ahi,x,p,c1,c2)
             ahi = anew;
         else    
             xNew = M.retr(x,p,anew);
-            gradAtAnew = M.inner(xNew,getGradient(problem,xNew),M.transp(x,xNew,p));
+            gradAtAnew = diffRetractionSphere(problem, M, anew, p, x, xNew);
             if abs(gradAtAnew) <= -c2*gradAtZero
                 alpha = anew;
                 return
@@ -453,4 +447,8 @@ function alpha = zoom(problem,M,alo,ahi,x,p,c1,c2)
         end
     end
     alpha = (alo+ahi)/2;
+end
+
+function slope = diffRetractionSphere(problem, M, alpha, p, xCur, xNext)
+    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
 end
