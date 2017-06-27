@@ -23,7 +23,7 @@ function  [x, cost, info, options] = bfgsCautious(problem, x, options)
     localdefaults.c1 = 0.0001;
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
-    localdefaults.memory = 10;
+    localdefaults.memory = 100;
     localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
