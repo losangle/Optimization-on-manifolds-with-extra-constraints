@@ -1,3 +1,5 @@
+%Sphere Isometric Transport.
+
 function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
 
     % Verify that the problem description is sufficient for the solver.

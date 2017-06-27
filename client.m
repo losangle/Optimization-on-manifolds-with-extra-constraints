@@ -20,20 +20,19 @@ xCur = problem.M.rand();
 profile clear;
 profile on;
 
+% [x, cost, info, options] = bfgsCautious(problem,xCur,options);
+% 
+% 
+% 
+% [x, cost, info, options] = bfgsManifold(problem,xCur,options);
+% %     Display some statistics.
+%     figure;
+%     semilogy([info.iter], [info.gradnorm], '.-');
+%     xlabel('Iteration number - BFGSManifold');
+%     ylabel('Norm of the gradient of f');
+
+
 [x, cost, info, options] = bfgsCautious(problem,xCur,options);
-
-
-
-[x, cost, info, options] = bfgsManifold(problem,xCur,options);
-%     Display some statistics.
-    figure;
-    semilogy([info.iter], [info.gradnorm], '.-');
-    xlabel('Iteration number - BFGSManifold');
-    ylabel('Norm of the gradient of f');
-
-
-[x, cost, info, options] = bfgsIsometric(problem,xCur,options);
-
 %     Display some statistics.
     figure;
     semilogy([info.iter], [info.gradnorm], '.-');
@@ -57,4 +56,18 @@ dim = 2;
 cost = @(x) (1-x(1))^2+100*(x(2)-x(1)^2)^2;
 grad = @(x) [-2*(1-x(1))+200*(x(2)-x(1)^2)*(-2*x(1));200*(x(2)-x(1)^2)];
 
+
+manifold = euclideanfactory(dim);
+problem.M = manifold;
+
+% Define the problem cost function and its Euclidean gradient.
+problem.cost  = cost;
+problem.egrad = grad;
+
 euclidean(cost,grad,dim)
+[x, cost, info, options] = bfgsCautious(problem);
+
+figure;
+semilogy([info.iter], [info.gradnorm], '.-');
+xlabel('Iteration number - TrustRegion');
+ylabel('Norm of the gradient of f');
