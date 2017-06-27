@@ -1,2 +1,2 @@
-alpha = 3.12412125;
+alpha = cell(1,0);
 fprintf('%.16e\n',alpha);

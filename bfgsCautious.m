@@ -1,4 +1,4 @@
-function  [x, cost, info, options] = bfgsManifold(problem, x, options)
+function  [x, cost, info, options] = bfgsCautious(problem, x, options)
 
     % Verify that the problem description is sufficient for the solver.
     if ~canGetCost(problem)
@@ -23,7 +23,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     localdefaults.c1 = 0.0001;
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
-    localdefaults.memory = 100;
+    localdefaults.memory = 10;
     localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
@@ -40,7 +40,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     % If no initial point x is given by the user, generate one at random.
     if ~exist('x', 'var') || isempty(x)
         xCur = problem.M.rand();
-    else 
+    else
         xCur = x;
     end
     
@@ -61,25 +61,28 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     info(1) = stats;
     info(min(10000, options.maxiter+1)).iter = [];
     
-    newgrad = grad;
-    
     if options.verbosity >= 2
         fprintf(' iter\t               cost val\t    grad. norm\n');
     end
     
+    
     %BFGS initialization
+    newgrad = grad;
+    
     k = 0;
     sHistory = cell(1,options.memory); %represents x_k+1 - x_k at T_x_k+1
     yHistory = cell(1,options.memory); %represents df_k+1 - df_k
-    xHistory = cell(1,options.memory); %represents x's.
+    RhoHistory = cell(1,options.memory); %represents x's.
     
     M = problem.M;
     M.retr = @M.exp;
     
-    alpha = 1;
+    alpha = 1; %Initial Alpha to start with
+    scaleFactor = 1; %Initial Scale Factor
     
     while true
-        
+%------------------------ROUTINE----------------------------
+
         % Display iteration information
         if options.verbosity >= 2
             fprintf('%5d\t%+.16e\t%.8e\n', iter, cost, gradnorm);
@@ -107,36 +110,20 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
             break;
         end
         
-        
 %%%% -----------obtain the direction for line search----------------
         xCurGradient = newgrad;
-        scaleFactor = 1;
-        if (k >= 1)
-            if (k >= options.memory)
-            scaleFactor = M.inner(xHistory{options.memory},yHistory{options.memory},sHistory{options.memory})/...
-                M.inner(xHistory{options.memory},yHistory{options.memory},yHistory{options.memory});
-            else
-            scaleFactor = M.inner(xHistory{k},yHistory{k},sHistory{k})/...
-                M.inner(xHistory{k},yHistory{k},yHistory{k});                
-            end
-        end
-        if (k>=options.memory)
-            negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,options.memory, scaleFactor);
-        else
-            negdir = direction(M, sHistory,yHistory,xHistory,...
-                xCur,xCurGradient,k, scaleFactor);
-        end
+        xCurGradientNorm = M.norm(xCur, xCurGradient);
+        
+        p = direction(M, sHistory,yHistory,RhoHistory,...
+                xCur,xCurGradient,min(k,options.memory), scaleFactor);
 
         %DEBUG only
-        %negdir = getGradient(problem, xCur);
-        
-        p = M.lincomb(xCur, -1, negdir);
+        %negdir = M.lincomb(xCur, -1 ,getGradient(problem, xCur));
         
         
 %%%% -----------%Get the stepsize (Default to 1)----------------        
         InnerProd_p_xCurGradient = M.inner(xCur,p,xCurGradient);
-
+        disp(InnerProd_p_xCurGradient/(M.norm(xCur,p)*M.norm(xCur,xCurGradient)));
         
         if options.linesearchVersion == 0
             alpha = linesearchWolfe(problem,M,xCur,p,options.c1,options.c2,options.amax);
@@ -159,19 +146,36 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
 %                 continue;
             end
         end
-        
-        
         newkey = storedb.getNewKey();
-        lsstats = [];
-        
+        lsstats = [];        
+  
+
+% Use of Original LineSearch
+%         disp(InnerProd_p_xCurGradient)
+%         [stepsize, xNext, newkey, lsstats] = linesearch(problem, xCur, M.lincomb(xCur, 1/M.norm(xCur,p), p), cost, InnerProd_p_xCurGradient);
+%         newgrad = getGradient(problem,xNext);
+%         step = M.lincomb(xCur, stepsize, p);
+%         sk = M.transp(xCur,xNext, step);
+%         beta = M.norm(xCur, step) / M.norm(xNext, sk);
+%         sk = M.lincomb(xNext, beta, sk);
+%         xCurGradient_TS_to_xNext = M.transp(xCur, xNext, xCurGradient);
+%         isometricScale = xCurGradientNorm/ M.norm(xNext, xCurGradient_TS_to_xNext);
+%         yk = M.lincomb(xNext, 1/beta, newgrad,...
+%             -isometricScale, xCurGradient_TS_to_xNext);
+%         costNext = getCost(problem, xNext);
         
 %%%% -------------------------%Update------------------------  
         xNext = M.retr(xCur,p,alpha); %!! CAN WE USE RETR HERE?
         newgrad = getGradient(problem,xNext);
         sk = M.transp(xCur,xNext,M.lincomb(xCur, alpha, p));
-
-        yk = M.lincomb(xNext, 1, newgrad,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+        beta = M.norm(xCur, M.lincomb(xCur, alpha, p)) / M.norm(xNext, sk);
+        fprintf('Beta = %f',beta);
+        sk = M.lincomb(xNext, beta, sk);
+        xCurGradient_TS_to_xNext = M.transp(xCur, xNext, xCurGradient);
+        isometricScale = xCurGradientNorm/ M.norm(xNext, xCurGradient_TS_to_xNext);
+        yk = M.lincomb(xNext, 1/beta, newgrad,...
+            -isometricScale, xCurGradient_TS_to_xNext);
+        
         
         %DEBUG only
         if options.debug == 1
@@ -183,21 +187,45 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
             checkCurvatureNext(M,xNext,sk,yk);
         end
         
-        if (k>=options.memory)
-            sHistory = sHistory([2:end 1]); %the most recent vector is on the right
-            sHistory{options.memory} = sk;
-            yHistory = yHistory([2:end 1]); %the most recent vector is on the right
-            yHistory{options.memory} = yk;
-            xHistory = xHistory([2:end 1]); %the most recent vector is on the right
-            xHistory{options.memory} = xCur;
-            k = k+1;
-        else
-            k = k+1;
-            sHistory{k} = sk;
-            yHistory{k} = yk;
-            xHistory{k} = xCur;
+        innerProduct_sk_yk = M.inner(xNext, sk, yk);
+        if (innerProduct_sk_yk/M.inner(xNext,sk,sk) >= xCurGradientNorm)
+            if (k>=options.memory)
+                for i = 2: options.memory 
+                    temp = M.transp(xCur,xNext,sHistory{i});
+                    sHistory{i} = M.lincomb(xNext, M.norm(xCur, sHistory{i})/M.norm(xNext, temp), temp);
+                    temp = M.transp(xCur,xNext,yHistory{i});
+                    yHistory{i} = M.lincomb(xNext, M.norm(xCur, yHistory{i})/M.norm(xNext, temp), temp);
+                end
+                sHistory = sHistory([2:end 1]); %the most recent vector is on the right
+                sHistory{options.memory} = sk;
+                yHistory = yHistory([2:end 1]); %the most recent vector is on the right
+                yHistory{options.memory} = yk;
+                RhoHistory = RhoHistory([2:end 1]); %the most recent vector is on the right
+                RhoHistory{options.memory} = 1/innerProduct_sk_yk;
+                k = k+1;
+            else
+                for i = 1: k
+                    temp = M.transp(xCur,xNext,sHistory{i});
+                    sHistory{i} = M.lincomb(xNext, M.norm(xCur, sHistory{i})/M.norm(xNext, temp), temp);
+                    temp = M.transp(xCur,xNext,yHistory{i});
+                    yHistory{i} = M.lincomb(xNext, M.norm(xCur, yHistory{i})/M.norm(xNext, temp), temp);
+                end
+                sHistory{k+1} = sk;
+                yHistory{k+1} = yk;
+                RhoHistory{k+1} = 1/innerProduct_sk_yk;
+                k = k+1;
+            end
+            scaleFactor = innerProduct_sk_yk/M.inner(xNext,yk,yk);
+        else 
+            for i = 1 : min(k,options.memory)
+                    temp = M.transp(xCur,xNext,sHistory{i});
+                    sHistory{i} = M.lincomb(xNext, M.norm(xCur, sHistory{i})/M.norm(xNext, temp), temp);
+                    temp = M.transp(xCur,xNext,yHistory{i});
+                    yHistory{i} = M.lincomb(xNext, M.norm(xCur, yHistory{i})/M.norm(xNext, temp), temp);   
+            end 
+            scaleFactor = scaleFactor; %Does not change
+            k = k; % Does not increase.
         end
-        
         % Compute the new cost-related quantities for x
         newgradnorm = problem.M.norm(xNext, newgrad);
         
@@ -298,32 +326,20 @@ end
 % TODO: unroll the function
 
 %Iteratively it returns the search direction based on memory.
-function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleFactor)
-    if (iter ~= 0)        
-        sk = sHistory{iter};
-        yk = yHistory{iter};
-        xprev = xHistory{iter};
-        rhok = 1/(M.inner(xCur,sk,yk));
-        InProdOfskAndxCurGrad = M.inner(xCur,sk,xCurGrad);
-        %DEBUG
-%         fprintf('Rouk is %f \n', rouk);
-        tempAtxCur = M.lincomb(xCur, 1, xCurGrad, -rhok*InProdOfskAndxCurGrad, yk);
-        %transport to the previous point.
-        
-%         norm_xCur = M.norm(xCur, tempAtxCur);
-        tempAtxPrev = M.transp(xCur,xprev, tempAtxCur);
-%         norm_xPrev = M.norm(xprev, tempAtxPrev);
-%         disp(norm_xPrev/norm_xCur)
-%         tempAtxPrev = M.lincomb(xprev, norm_xPrev/norm_xCur, tempAtxPrev);
-        tempAtxPrev = direction(M, sHistory,yHistory,xHistory,xprev,...
-            tempAtxPrev,iter-1,scaleFactor);
-        %transport the vector back
-        tempAtxCur = M.transp(xprev,xCur,tempAtxPrev);
-        dir = M.lincomb(xCur, 1, tempAtxCur,...
-            -rhok*(M.inner(xCur,yk,tempAtxCur)-InProdOfskAndxCurGrad), sk);
-    else
-        dir = M.lincomb(xCur, scaleFactor, xCurGrad);
+function dir = direction(M, sHistory, yHistory, rhoHistory, ...
+                                xCur, xCurGrad, iter, scaleFactor)
+    q = xCurGrad;
+    epsTempList = cell(1,iter);
+    for i = iter : -1 : 1
+        epsTempList{i} = rhoHistory{i} * M.inner(xCur, sHistory{i}, q);
+        q = M.lincomb(xCur, 1, q, -epsTempList{i}, yHistory{i});
     end
+    r = M.lincomb(xCur, scaleFactor, q);
+    for i = 1 : iter
+        omega = rhoHistory{i} * M.inner(xCur, yHistory{i}, r);
+        r = M.lincomb(xCur, 1, r, epsTempList{i} - omega, sHistory{i});
+    end
+    dir = M.lincomb(xCur, -1, r);
 end
 
 %This version follows Qi et al, 2010

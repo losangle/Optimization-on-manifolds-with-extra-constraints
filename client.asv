@@ -1,4 +1,4 @@
-dim = 2000;
+dim = 100;
 A = randn(dim,dim);
 A = A + A.';
 cost = @(x) (x'*A*x);
@@ -28,16 +28,13 @@ problem.egrad = grad;
 %bfgsManifold(problem);
 
 
-xCur = problem.M.rand();
-
 % profile clear;
 % profile on;
-% [x, cost, info, options] = bfgsManifold(problem,xCur);
-% 
-% [x, cost, info, options] = bfgsIsometric(problem,xCur);
+[x, cost, info, options] = bfgsManifold(problem);
+[x, cost, info, options] = bfgsManifold(problem);
 
 
-[x, cost, info, options] = bfgsCautious(problem);
+%[x, cost, info, options] = bfgsCautious(problem);
     % Display some statistics.
 %     figure;
 %     semilogy([info.iter], [info.gradnorm], '.-');
@@ -45,7 +42,7 @@ xCur = problem.M.rand();
 %     ylabel('Norm of the gradient of f');
     
     
-%[x, cost, info, options] = trustregions(problem);
+[x, cost, info, options] = trustregions(problem);
     % Display some statistics.
 %     figure;
 %     semilogy([info.iter], [info.gradnorm], '.-');
