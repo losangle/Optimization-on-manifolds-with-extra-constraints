@@ -1,4 +1,4 @@
-function  [x, cost, info, options] = bfgsManifold(problem, x, options)
+function  [x, cost, info, options] = bfgsIsometric(problem, x, options)
 
     % Verify that the problem description is sufficient for the solver.
     if ~canGetCost(problem)
@@ -40,7 +40,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     % If no initial point x is given by the user, generate one at random.
     if ~exist('x', 'var') || isempty(x)
         xCur = problem.M.rand();
-    else 
+    else
         xCur = x;
     end
     
@@ -165,13 +165,21 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
         lsstats = [];
         
         
-%%%% -------------------------%Update------------------------  
+%%%% -------------------------%Update------------------------ 
+        xCurGradientNorm = M.norm(xCur, xCurGradient);
         xNext = M.retr(xCur,p,alpha); %!! CAN WE USE RETR HERE?
         newgrad = getGradient(problem,xNext);
         sk = M.transp(xCur,xNext,M.lincomb(xCur, alpha, p));
-
-        yk = M.lincomb(xNext, 1, newgrad,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+        
+        beta = M.norm(xCur, M.lincomb(xCur, alpha, p)) / M.norm(xNext, sk);
+        %fprintf('Beta = %f',beta);
+        sk = M.lincomb(xNext, beta, sk);
+        
+        xCurGradient_TS_to_xNext = M.transp(xCur, xNext, xCurGradient);
+        isometricScale = xCurGradientNorm/ M.norm(xNext, xCurGradient_TS_to_xNext);
+        
+        yk = M.lincomb(xNext, 1/beta, newgrad,...
+            -isometricScale, xCurGradient_TS_to_xNext);
         
         %DEBUG only
         if options.debug == 1
@@ -312,6 +320,7 @@ function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleF
         
 %         norm_xCur = M.norm(xCur, tempAtxCur);
         tempAtxPrev = M.transp(xCur,xprev, tempAtxCur);
+        tempAtxPrev = M.lincomb(xprev, M.norm(xCur, tempAtxCur)/M.norm(xprev, tempAtxPrev), tempAtxPrev);
 %         norm_xPrev = M.norm(xprev, tempAtxPrev);
 %         disp(norm_xPrev/norm_xCur)
 %         tempAtxPrev = M.lincomb(xprev, norm_xPrev/norm_xCur, tempAtxPrev);
@@ -319,6 +328,8 @@ function dir = direction(M, sHistory,yHistory,xHistory,xCur,xCurGrad,iter,scaleF
             tempAtxPrev,iter-1,scaleFactor);
         %transport the vector back
         tempAtxCur = M.transp(xprev,xCur,tempAtxPrev);
+        tempAtxCur = M.lincomb(xCur, M.norm(xprev, tempAtxPrev)/M.norm(xCur, tempAtxCur), tempAtxCur);
+        
         dir = M.lincomb(xCur, 1, tempAtxCur,...
             -rhok*(M.inner(xCur,yk,tempAtxCur)-InProdOfskAndxCurGrad), sk);
     else
