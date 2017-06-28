@@ -1,3 +1,4 @@
+clear all, close all, clc;
 dim = 1000;
 A = randn(dim,dim);
 A = A + A.';
@@ -32,15 +33,18 @@ profile on;
 %     ylabel('Norm of the gradient of f');
 
 
-[x, cost, info, options] = bfgsCautious(problem,xCur,options);
-%     Display some statistics.
-    figure;
-    semilogy([info.iter], [info.gradnorm], '.-');
-    xlabel('Iteration number - BFGSIsometric');
-    ylabel('Norm of the gradient of f');
+bfgsClean(problem,xCur,options);
+
+% 
+% [x, cost, info, options] = bfgsCautious(problem,xCur,options);
+% %     Display some statistics.
+%     figure;
+%     semilogy([info.iter], [info.gradnorm], '.-');
+%     xlabel('Iteration number - BFGSIsometric');
+%     ylabel('Norm of the gradient of f');
     
     
-% [x, cost, info, options] = trustregions(problem);
+[x, cost, info, options] = trustregions(problem);
 %     Display some statistics.
 %     figure;
 %     semilogy([info.iter], [info.gradnorm], '.-');

@@ -5,11 +5,12 @@ x1 = M.rand();
 x2 = M.rand();
 u1 = M.randvec(x1);
 u2 = M.randvec(x1);
-inner1 = M.inner(x1,u1,u2)
+inner1 = M.inner(x1,u1,u2);
+fprintf('%.16e\n',inner1)
 v1 = M.isotransp(x1,x2,u1);
 v2 = M.isotransp(x1,x2,u2);
-inner2 = M.inner(x2,v1,v2)
-% 
+fprintf('%.16e',M.inner(x2,v1,v2))
+
 % x1 = M.rand();
 % p = M.randvec(x1);
 % alpha = 100000000000;

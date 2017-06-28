@@ -365,6 +365,7 @@ function [costNext,changeDir,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, 
         if (diff == 0)
             changeDir = 1;
             l = logspace(-15,1,500);
+           
             break;
         end
         alpha = 0.5 * alpha;
