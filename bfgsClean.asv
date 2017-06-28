@@ -1,6 +1,6 @@
-function [gradnorms, alphas, time] = cacheSave(problem, x, options)
+function bfgsClean(problem, x, options)
     
-    timetic = tic();
+    
     M = problem.M;
 
     if ~exist('x','var')|| isempty(x)
@@ -68,9 +68,9 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
-        sk = M.transp(xCur, xNext, step);
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
@@ -78,8 +78,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -89,8 +89,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -99,8 +99,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
         iter = iter + 1;
@@ -113,9 +113,9 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
         alphas(1,iter+1) = alpha;
     end
     
-    gradnorms = gradnorms(1,1:iter+1);
-    alphas = alphas(1,1:iter+1);
-    time = toc(timetic);
+    disp(gradnorms(1,1:iter+1))
+    figure
+    semilogy(gradnorms(1,1:iter+1))
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)

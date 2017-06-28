@@ -1,4 +1,4 @@
-function [gradnorms, alphas, time] = cacheSave(problem, x, options)
+function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -59,18 +59,23 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
                 xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, p)*alpha;
-        else
+        elseif options.linesearchVersion == 1
             [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
             alpha = stepsize/M.norm(xCur, p);
             step = M.lincomb(xCur, alpha, p);
             xNextCost = getCost(problem, xNext);
+        else
+            [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.exp(xCur, step, 1);
         end
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
-        sk = M.transp(xCur, xNext, step);
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
@@ -78,8 +83,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -89,8 +94,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -99,8 +104,8 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
         iter = iter + 1;
@@ -177,6 +182,27 @@ function [alpha, xNext, xNextCost] = ...
         xNextCost = f0; 
     end
     
-    fprintf('alpha = %.16e\n', alpha)
+%     fprintf('alpha = %.16e\n', alpha)
 end
 
+
+function [costNext,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, alphaprev)
+
+    alpha = alphaprev;
+    costAtx = getCost(problem,x);
+    while (getCost(problem,M.exp(x,p,2*alpha))-costAtx < alpha*pTGradAtx)
+        alpha = 2*alpha;
+    end
+    costNext = getCost(problem,M.exp(x,p,alpha));
+    diff = costNext - costAtx;
+    while (diff>= 0.5*alpha*pTGradAtx)
+        if (diff == 0)
+            alpha = 0;
+            break;
+        end
+        alpha = 0.5 * alpha;
+        costNext = getCost(problem,M.exp(x,p,alpha));
+        diff = costNext - costAtx;
+    end
+%     fprintf('alpha = %.16e\n',alpha);    
+end
