@@ -1,4 +1,6 @@
 function bfgsClean(problem, x, options)
+    
+    
     M = problem.M;
 
     if ~exist('x','var')|| isempty(x)
@@ -10,6 +12,12 @@ function bfgsClean(problem, x, options)
     xCurGradient = getGradient(problem, xCur);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
+    
+    
+    gradnorms = zeros(1,1000);
+    gradnorms(1,1) = xCurGradNorm;
+    alphas = zeros(1,1000);
+    alpha(1,1) = 1;
 
     options.error = 1e-7;
     options.memory = 10;
@@ -46,10 +54,17 @@ function bfgsClean(problem, x, options)
 
         %_______Line Search____________________________
 
-        [alpha, xNext, xNextCost] = linesearch(problem,...
-            xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
-        step = M.lincomb(xCur, stepsize/M.norm(xCur,p), p);
-
+        if options.linesearchVersion == 0
+            [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
+                xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, p)*alpha;
+        else
+            [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
+            alpha = stepsize/M.norm(xCur, p);
+            step = M.lincomb(xCur, alpha, p);
+            xNextCost = getCost(problem, xNext);
+        end
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
@@ -92,8 +107,15 @@ function bfgsClean(problem, x, options)
         xCur = xNext;
         xCurGradient = xNextGradient;
         xCurGradNorm = M.norm(xCur, xNextGradient);
-        xCurCost = getCost(problem, xCur);
+        xCurCost = xNextCost;
+        
+        gradnorms(1,iter+1)= xCurGradNorm;
+        alphas(1,iter+1) = alpha;
     end
+    
+    disp(gradnorms(1,1:iter+1))
+    figure
+    semilogy(gradnorms(1,1:iter+1))
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
@@ -112,8 +134,8 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
 end
 
 
-function [stepsize, newx, newkey, lsstats] = ...
-                  linesearch(problem, x, d, f0, df0, alphaprev)
+function [alpha, xNext, xNextCost] = ...
+                  linesearchBFGS(problem, x, d, f0, df0, alphaprev)
 
     % Backtracking default parameters. These can be overwritten in the
     % options structure which is passed to the solver.
@@ -121,80 +143,39 @@ function [stepsize, newx, newkey, lsstats] = ...
     optimism = 1/.5;
     suff_decr = 1e-4;
     max_steps = 25;
-    initial_stepsize = 1;
-
-    % Compute the norm of the search direction.
-    % This is useful to make the linesearch algorithm invariant under the
-    % scaling of d. The rationale is that the important information is the
-    % search direction, not the size of that vector. The question of how
-    % far we should go is precisely what the linesearch algorithm is
-    % supposed to answer: the calling algorithm should not need to care.
-    norm_d = problem.M.norm(x, d);
     
     % At first, we have no idea of what the step size should be.
-    alpha = alpha * optimism;
-   
-    
-    % If we have no information about the previous iteration (maybe this is
-    % the first one?) or if the above formula gave a too small step size
-    % (perhaps it is even negative), then fall back to a user supplied
-    % suggestion for the first step size (the "a priori").
-    % At any rate, the choice should be invariant under rescaling of the
-    % cost function f and of the search direction d, and it should be
-    % bounded away from zero for convergence guarantees. We must allow it
-    % to be close to zero though, for fine convergence.
-    if isnan(alpha) || alpha*norm_d <= eps
-        alpha = initial_stepsize/norm_d;
-    end
-    
+    alpha = alphaprev * optimism;
 
     % Make the chosen step and compute the cost there.
-    newx = problem.M.retr(x, d, alpha);
-    newkey = storedb.getNewKey();
-    newf = getCost(problem, newx, storedb, newkey);
+    xNext = problem.M.retr(x, d, alpha);
+    xNextCost = getCost(problem, xNext);
     cost_evaluations = 1;
     
     % Backtrack while the Armijo criterion is not satisfied
-    while newf > f0 + suff_decr*alpha*df0
+    while xNextCost > f0 + suff_decr*alpha*df0
         
         % Reduce the step size,
         alpha = contraction_factor * alpha;
         
         % and look closer down the line
-        newx = problem.M.retr(x, d, alpha);
-        newkey = storedb.getNewKey();
-        newf = getCost(problem, newx, storedb, newkey);
+        xNext = problem.M.retr(x, d, alpha);
+        xNextCost = getCost(problem, xNext);
         cost_evaluations = cost_evaluations + 1;
         
         % Make sure we don't run out of budget
-        if cost_evaluations >= max_ls_steps
+        if cost_evaluations >= max_steps
             break;
         end
         
     end
     
     % If we got here without obtaining a decrease, we reject the step.
-    if newf > f0
+    if xNextCost > f0
         alpha = 0;
-        newx = x;
-        newkey = key;
-        newf = f0; %#ok<NASGU>
+        xNext = x;
+        xNextCost = f0; 
     end
-    
-    % As seen outside this function, stepsize is the size of the vector we
-    % retract to make the step from x to newx. Since the step is alpha*d:
-    stepsize = alpha * norm_d;
-
-    % Save the situtation faced now so that, at the next iteration,
-    % we will know something about the previous decision.
-    storedb.internal.lsmem.f0 = f0;
-    storedb.internal.lsmem.df0 = df0;
-    storedb.internal.lsmem.stepsize = stepsize;
-    
-    % Return some statistics also, for possible analysis.
-    lsstats.costevals = cost_evaluations;
-    lsstats.stepsize = stepsize;
-    lsstats.alpha = alpha;
     
     fprintf('alpha = %.16e\n', alpha)
 end

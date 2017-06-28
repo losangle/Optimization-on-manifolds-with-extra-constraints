@@ -1,276 +1,182 @@
-function  [x, cost, info, options] = cacheSave(problem, x, options)
+function [gradnorms, alphas, time] = cacheSave(problem, x, options)
     
-    DEBUG = 0;
-
-    % Verify that the problem description is sufficient for the solver.
-    if ~canGetCost(problem)
-        warning('manopt:getCost', ...
-            'No cost provided. The algorithm will likely abort.');
-    end
-    if ~canGetGradient(problem) && ~canGetApproxGradient(problem)
-        % Note: we do not give a warning if an approximate gradient is
-        % explicitly given in the problem description, as in that case the user
-        % seems to be aware of the issue.
-        warning('manopt:getGradient:approx', ...
-            ['No gradient provided. Using an FD approximation instead (slow).\n' ...
-            'It may be necessary to increase options.tolgradnorm.\n' ...
-            'To disable this warning: warning(''off'', ''manopt:getGradient:approx'')']);
-        problem.approxgrad = approxgradientFD(problem);
-    end
-    
-    %Parameter of convergence
-    error = 1e-6;
-
-    %Coefficients for Wolf condition and line search
-    c1 = 0.0001;
-    c2 = 0.9;
-    amax = 1000;
-
-    %Parameter of Hessian update
-    memory = 10;
-    
-    %BFGS
-    xCur = problem.M.rand(); %current point
-    k = 0;
-    sHistory = cell(1,memory); %represents x_k+1 - x_k at T_x_k+1
-    yHistory = cell(1,memory); %represents df_k+1 - df_k
-    xHistory = cell(1,memory); %represents x's.
-    
-    M = problem.M;
     timetic = tic();
-    
-    while M.norm(xCur,getGradient(problem,xCur)) > error
-        
-%            fprintf('\nNorm at start of iteration %d is %f\n', k, M.norm(xCur,getGradient(problem,xCur)));
-%            fprintf('Cost at start of iteration %d is %f\n', k, getCost(problem,xCur));
-            fprintf('%5d\t%+.16e\t%.8e\n', k, getCost(problem,xCur), M.norm(xCur,getGradient(problem,xCur)));
+    M = problem.M;
 
-            %obtain the direction for line search
-            if (k>=memory)
-                 negdir = direction(M, sHistory, yHistory, xHistory,...
-                     xCur,getGradient(problem,xCur), memory);
-%                negdir = directiondummy(M, sHistory,yHistory,xHistory,...
-%                    xCur,getGradient(problem,xCur),memory);
-            else
-                 negdir = direction(M, sHistory, yHistory, xHistory,...
-                     xCur,getGradient(problem,xCur), k);
-%                negdir = directiondummy(M, sHistory,yHistory,xHistory,...
-%                    xCur,getGradient(problem,xCur),k);
-            end
-            p = M.mat(xCur, -M.vec(xCur,negdir));
-            
-            
-            %Get the stepsize (Default to 1)
-%             alpha = linesearch(problem,M,xCur,p,c1,c2,amax);
-            alpha = linesearchv2(problem,M,xCur,p);
-                        
-            %If step size is too small, there must be something wrong
-%             if (alpha < 1e-10)
-%                 fprintf('Step size is too small')
-%                 return
-%             end
-            
-            
-            %Update
-            xNext = M.retr(xCur,p,alpha); %!! CAN WE USE RETR HERE?
-            sk = M.transp(xCur,xNext,M.mat(xCur,alpha*M.vec(xCur,p)));
-            yk = M.mat(xNext, M.vec(xNext, getGradient(problem,xNext))...
-                - M.vec(xNext,M.transp(xCur, xNext, getGradient(problem,xCur))));
-            
-            %DEBUG only
-            if DEBUG == 1
-                fprintf('alpha is %f \n', alpha);
-                fprintf('Check if p is descent direction: %f\n',...
-                    M.inner(xCur,p,getGradient(problem,xCur)))
-                checkWolfe(problem,M,xCur,p,c1,c2,alpha);
-                checkCurvatureCur(problem,M,xCur,alpha,p);
-                checkCurvatureNext(M,xNext,sk,yk);
-            end
-            
-            if (k>=memory)
-                sHistory = sHistory([2:end 1]); %the most recent vector is on the right
-                sHistory{memory} = sk;
-                yHistory = yHistory([2:end 1]); %the most recent vector is on the right
-                yHistory{memory} = yk;
-                xHistory = xHistory([2:end 1]); %the most recent vector is on the right
-                xHistory{memory} = xCur;
-                k = k+1;
-            else
-                k = k+1;
-                sHistory{k} = sk;
-                yHistory{k} = yk;
-                xHistory{k} = xCur;
-            end
-            xCur = xNext;
-            
-            
-    end
-    
-    x = xCur;
-    cost = getCost(problem,xCur);
-    
-    disp(toc(timetic))
-    
-end
-
-%Check if <sk,yk> > 0 at the current point
-function checkCurvatureCur(problem,M,xCur,alpha,p)
-    sk = M.mat(xCur,alpha*M.vec(xCur,p));
-    xNext = M.retr(xCur,p,alpha);
-    yk = M.vec(xCur,M.transp(xNext,xCur,getGradient(problem,xNext)))-...
-        M.vec(xCur,getGradient(problem,xCur));
-    yk = M.mat(xCur,yk);
-    if (M.inner(xCur,sk,yk) < 0)
-        fprintf('<sk,yk> is negative at xCur with val %f\n', M.inner(xCur,sk,yk));
-    end
-end
-
-%Check if <sk,yk> > 0 at the next point
-function checkCurvatureNext(M,xNext,sk,yk)
-    if (M.inner(xNext,sk,yk) < 0)
-        fprintf('<sk,yk> is negative at xNext with val %f\n', M.inner(xNext,sk,yk));
-    end
-end
-
-%Check if Wolfe condition is satisfied.
-function checkWolfe(problem,M,x,p,c1,c2,alpha)
-    correct = 1;
-    xnew = M.retr(x,p,alpha);
-    if (getCost(problem,xnew)-getCost(problem,x))>...
-            c1*alpha*M.inner(x,getGradient(problem,x),p)
-        fprintf('Wolfe Cond 1:Armijo is violated\n')
-        correct = 0;
-    end
-    if (abs(M.inner(xnew,M.transp(x,xnew,p),getGradient(problem,xnew))) >...
-            -c2*M.inner(x,p,getGradient(problem,x)))
-        correct = 0;
-        fprintf('Wolfe Cond 2: flat gradient is violated\n')
-        fprintf('     newgrad is %f\n',M.inner(xnew,M.transp(x,xnew,p),getGradient(problem,xnew)));
-        fprintf('     oldgrad is %f\n',-c2*M.inner(x,p,getGradient(problem,x)));
-    end
-    if correct == 1
-        fprintf('Wolfe is correct\n')
-    end
-end
-
-%Iteratively it returns the search direction based on memory.
-function dir = direction(M, sHistory,yHistory,xHistory,xCur,xgrad,iter)
-    %TODO: sk comment. lincomb
-    if (iter ~= 0)        
-        sk = sHistory{iter};
-        yk = yHistory{iter};
-        xk = xHistory{iter};
-        rouk = 1/(M.inner(xCur,sk,yk));
-        %DEBUG
-        %fprintf('Rouk is %f \n', rouk);
-        tempvec = M.vec(xCur,xgrad) - rouk*M.inner(xCur,sk,xgrad)*M.vec(xCur,yk);
-        temp = M.mat(xCur,tempvec);
-        %transport to the previous point.
-        temp = M.transp(xCur,xk,temp);
-        temp = direction(M, sHistory,yHistory,xHistory,xk,...
-            temp,iter-1);
-        %transport the vector back
-        temp = M.transp(xk,xCur,temp);
-        tempvec = M.vec(xCur,temp) - rouk*M.inner(xCur,yk,temp)*M.vec(xCur,sk);
-        tempvec = tempvec + rouk*M.inner(xCur,sk,xgrad)*M.vec(xCur,sk);
-        dir = M.mat(xCur, tempvec);
+    if ~exist('x','var')|| isempty(x)
+        xCur = x;
     else
-        dir = xgrad;
+        xCur = M.rand();
     end
-end
 
-function dir = directiondummy(M, sHistory,yHistory,xHistory,...
-                    xCur,xgrad,k)
-    dir = xgrad;
-end
+    xCurGradient = getGradient(problem, xCur);
+    xCurGradNorm = M.norm(xCur, xCurGradient);
+    xCurCost = getCost(problem, xCur);
+    
+    
+    gradnorms = zeros(1,1000);
+    gradnorms(1,1) = xCurGradNorm;
+    alphas = zeros(1,1000);
+    alpha(1,1) = 1;
 
-%BUG FIX.
-%This version follows Qi et al, 2010
-function alpha = linesearchv2(problem, M, x, p)
-    %For bedugging. Shows phi(alpha)
-%     n = 1000;
-%     steps = linspace(-10,10,n);
-%     costs = zeros(1,n);
-%     for i = 1:n
-%         costs(1,i) = getCost(problem,M.retr(x,p,steps(i)));
-%     end
-%     figure
-%     plot(steps,costs);
-%     xlabel('x')
+    options.error = 1e-7;
+    options.memory = 10;
 
+
+    k = 0;
+    iter = 0;
+    sHistory = cell(1, options.memory);
+    yHistory = cell(1, options.memory);
+    rhoHistory = cell(1, options.memory);
     alpha = 1;
-    c = M.inner(x,getGradient(problem,x),p);
-    while (getCost(problem,M.retr(x,p,2*alpha))-getCost(problem,x) < alpha*c)
-        alpha = 2*alpha;
-    end
-    while (getCost(problem,M.retr(x,p,alpha))-getCost(problem,x) >= 0.5*alpha*c)
-        alpha = 0.5 * alpha;
-    end
-end
+    scaleFactor = 1;
+    stepsize = 1;
 
+    fprintf(' iter\t               cost val\t    grad. norm\t   alpha \n');
 
-%This part follows Nocedal p59-60 for strong Wolfe conditions.
-function alpha = linesearch(problem,M,x,p,c1,c2,amax)
-    %For bedugging. Shows phi(alpha)
-%     n = 1000;
-%     steps = linspace(-10,10,n);
-%     costs = zeros(1,n);
-%     for i = 1:n
-%         costs(1,i) = getCost(problem,M.retr(x,p,steps(i)));
-%     end
-%     figure
-%     plot(steps,costs);
-%     xlabel('x')
+    while (1)
+        %_______Print Information and stop information________
+        fprintf('%5d\t%+.16e\t%.8e\n', iter, xCurCost, xCurGradNorm);
 
-    aprev = 0;
-    acur = 1;
-    i = 1;
-    gradAtZero = M.inner(x,getGradient(problem,x),p);
-    while acur < amax
-        xCur = M.retr(x,p,acur);
-        if (getCost(problem,xCur)>getCost(problem,x)+c1*acur*gradAtZero)||...
-                (problem.cost(xCur)>=getCost(problem,M.retr(x,p,aprev)) && i>1)
-            alpha = zoom(problem,M,aprev,acur,x,p,c1,c2);
-            return;
+        if (xCurGradNorm < options.error)
+            fprintf('Target Reached\b');
+            break;
         end
-        %MAYBE EXP is needed?
-        gradAtCur = M.inner(xCur,getGradient(problem,xCur),M.transp(x,xCur,p));
-        if (abs(gradAtCur) <= -c2*gradAtZero)
-            alpha = acur;
-            return;
+        if (stepsize <= 1e-10)
+            fprintf('Stepsize too small\n')
+            break;
         end
-        if gradAtCur >= 0
-            alpha = zoom(problem,M,acur,aprev,x,p,c1,c2);
-            return;
-        end
-        aprev = acur;
-        acur = acur * 2;
-        i = i+1;
-    end
-    alpha = amax; %Not sure if this is right.
-end
 
-function alpha = zoom(problem,M,alo,ahi,x,p,c1,c2)
-    costAtZero = getCost(problem,x);
-    gradAtZero = M.inner(x,getGradient(problem,x),p);
-    while abs(alo-ahi) > 1e-10
-        anew = (alo+ahi)/2;
-        costAtAnew = getCost(problem,M.retr(x,p,anew));
-        costAtAlo = getCost(problem,M.retr(x,p,alo));
-        if (costAtAnew > costAtZero +c1*anew*gradAtZero) || (costAtAnew >= costAtAlo)
-            ahi = anew;
-        else    
-            xNew = M.retr(x,p,anew);
-            gradAtAnew = M.inner(xNew,getGradient(problem,xNew),M.transp(x,xNew,p));
-            if abs(gradAtAnew) <= -c2*gradAtZero
-                alpha = anew;
-                return
+        %_______Get Direction___________________________
+
+        p = getDirection(M, xCur, xCurGradient, sHistory,...
+            yHistory, rhoHistory, scaleFactor, min(k, options.memory));
+
+        %_______Line Search____________________________
+
+        if options.linesearchVersion == 0
+            [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
+                xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, p)*alpha;
+        else
+            [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
+            alpha = stepsize/M.norm(xCur, p);
+            step = M.lincomb(xCur, alpha, p);
+            xNextCost = getCost(problem, xNext);
+        end
+        
+        %_______Updating the next iteration_______________
+        xNextGradient = getGradient(problem, xNext);
+        sk = M.transp(xCur, xNext, step);
+        yk = M.lincomb(xNext, 1, xNextGradient,...
+            -1, M.transp(xCur, xNext, xCurGradient));
+
+        inner_sk_yk = M.inner(xNext, yk, sk);
+        if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
+            rhok = 1/inner_sk_yk;
+            scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
+            if (k>= options.memory)
+                for  i = 2:options.memory
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                end
+                sHistory = sHistory([2:end 1]);
+                sHistory{options.memory} = sk;
+                yHistory = yHistory([2:end 1]);
+                yHistory{options.memory} = yk;
+                rhoHistory = rhoHistory([2:end 1]);
+                rhoHistory{options.memory} = rhok;
+            else
+                for  i = 1:k
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                end
+                sHistory{k+1} = sk;
+                yHistory{k+1} = yk;
+                rhoHistory{k+1} = rhok;
             end
-            if gradAtAnew*(ahi-alo) >= 0 
-                ahi = alo;
+            k = k+1;
+        else
+            for  i = 1:min(k,options.memory)
+                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
             end
-            alo = anew;
         end
+        iter = iter + 1;
+        xCur = xNext;
+        xCurGradient = xNextGradient;
+        xCurGradNorm = M.norm(xCur, xNextGradient);
+        xCurCost = xNextCost;
+        
+        gradnorms(1,iter+1)= xCurGradNorm;
+        alphas(1,iter+1) = alpha;
     end
-    alpha = (alo+ahi)/2;
+    
+    gradnorms = gradnorms(1,1:iter+1);
+    alphas = alphas(1,1:iter+1);
+    time = toc(timetic);
 end
+
+function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
+    q = xCurGradient;
+    inner_s_q = cell(1, k);
+    for i = k : -1: 1
+        inner_s_q{i} = rhoHistory{i}*M.inner(xCur, sHistory{i},q);
+        q = M.lincomb(xCur, 1, q, -inner_s_q{i}, yHistory{i});
+    end
+    r = M.lincomb(xCur, scaleFactor, q);
+    for i = 1: k
+         omega = rhoHistory{i}*M.inner(xCur, yHistory{i},r);
+         r = M.lincomb(xCur, 1, r, inner_s_q{i}-omega, sHistory{i});
+    end
+    dir = M.lincomb(xCur, -1, r);
+end
+
+
+function [alpha, xNext, xNextCost] = ...
+                  linesearchBFGS(problem, x, d, f0, df0, alphaprev)
+
+    % Backtracking default parameters. These can be overwritten in the
+    % options structure which is passed to the solver.
+    contraction_factor = .5;
+    optimism = 1/.5;
+    suff_decr = 1e-4;
+    max_steps = 25;
+    
+    % At first, we have no idea of what the step size should be.
+    alpha = alphaprev * optimism;
+
+    % Make the chosen step and compute the cost there.
+    xNext = problem.M.retr(x, d, alpha);
+    xNextCost = getCost(problem, xNext);
+    cost_evaluations = 1;
+    
+    % Backtrack while the Armijo criterion is not satisfied
+    while xNextCost > f0 + suff_decr*alpha*df0
+        
+        % Reduce the step size,
+        alpha = contraction_factor * alpha;
+        
+        % and look closer down the line
+        xNext = problem.M.retr(x, d, alpha);
+        xNextCost = getCost(problem, xNext);
+        cost_evaluations = cost_evaluations + 1;
+        
+        % Make sure we don't run out of budget
+        if cost_evaluations >= max_steps
+            break;
+        end
+        
+    end
+    
+    % If we got here without obtaining a decrease, we reject the step.
+    if xNextCost > f0
+        alpha = 0;
+        xNext = x;
+        xNextCost = f0; 
+    end
+    
+    fprintf('alpha = %.16e\n', alpha)
+end
+

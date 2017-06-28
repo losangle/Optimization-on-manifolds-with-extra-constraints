@@ -1,4 +1,6 @@
-function bfgsClean(problem, x, options)
+function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
+    
+    timetic = tic();
     M = problem.M;
 
     if ~exist('x','var')|| isempty(x)
@@ -10,9 +12,15 @@ function bfgsClean(problem, x, options)
     xCurGradient = getGradient(problem, xCur);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
+    
+    
+    gradnorms = zeros(1,1000);
+    gradnorms(1,1) = xCurGradNorm;
+    alphas = zeros(1,1000);
+    alpha(1,1) = 1;
 
     options.error = 1e-7;
-    options.memory = 50;
+    options.memory = 10;
 
 
     k = 0;
@@ -46,11 +54,22 @@ function bfgsClean(problem, x, options)
 
         %_______Line Search____________________________
 
-        [alpha, xNext, xNextCost] = linesearch(problem,...
-            xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
-        step = M.lincomb(xCur, alpha, p);
-        stepsize = M.norm(xCur, p)*alpha;
-
+        if options.linesearchVersion == 0
+            [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
+                xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, p)*alpha;
+        elseif options.linesearchVersion == 1
+            [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
+            alpha = stepsize/M.norm(xCur, p);
+            step = M.lincomb(xCur, alpha, p);
+            xNextCost = getCost(problem, xNext);
+        else
+            [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.exp(xCur, step, 1);
+        end
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
@@ -94,7 +113,14 @@ function bfgsClean(problem, x, options)
         xCurGradient = xNextGradient;
         xCurGradNorm = M.norm(xCur, xNextGradient);
         xCurCost = xNextCost;
+        
+        gradnorms(1,iter+1)= xCurGradNorm;
+        alphas(1,iter+1) = alpha;
     end
+    
+    gradnorms = gradnorms(1,1:iter+1);
+    alphas = alphas(1,1:iter+1);
+    time = toc(timetic);
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
@@ -114,7 +140,7 @@ end
 
 
 function [alpha, xNext, xNextCost] = ...
-                  linesearch(problem, x, d, f0, df0, alphaprev)
+                  linesearchBFGS(problem, x, d, f0, df0, alphaprev)
 
     % Backtracking default parameters. These can be overwritten in the
     % options structure which is passed to the solver.
@@ -153,10 +179,30 @@ function [alpha, xNext, xNextCost] = ...
     if xNextCost > f0
         alpha = 0;
         xNext = x;
-        newkey = key;
         xNextCost = f0; 
     end
     
-    fprintf('alpha = %.16e\n', alpha)
+%     fprintf('alpha = %.16e\n', alpha)
 end
 
+
+function [costNext,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, alphaprev)
+
+    alpha = alphaprev;
+    costAtx = getCost(problem,x);
+    while (getCost(problem,M.exp(x,p,2*alpha))-costAtx < alpha*pTGradAtx)
+        alpha = 2*alpha;
+    end
+    costNext = getCost(problem,M.exp(x,p,alpha));
+    diff = costNext - costAtx;
+    while (diff>= 0.5*alpha*pTGradAtx)
+        if (diff == 0)
+            alpha = 0;
+            break;
+        end
+        alpha = 0.5 * alpha;
+        costNext = getCost(problem,M.exp(x,p,alpha));
+        diff = costNext - costAtx;
+    end
+%     fprintf('alpha = %.16e\n',alpha);    
+end

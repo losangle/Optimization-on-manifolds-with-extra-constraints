@@ -1,10 +1,10 @@
 clear all, close all, clc;
-tests = 10;
+tests = 1;
 for graphs = 1 : tests
     figure
-    n = 4;
+    n = 3;
     for numtest = 0 : n-1
-        dim = 1000;
+        dim = 100;
         A = randn(dim,dim);
 
 
@@ -22,38 +22,38 @@ for graphs = 1 : tests
         xCur = problem.M.rand();
         options.memory = 15;
         %Set options
-        options.linesearchVersion = 1; %BFGS LineSearch
+        options.linesearchVersion = 0; %BFGS LineSearch
 
         [gradnorms, alphas,time] = bfgsClean(problem, xCur, options);
         subplot(n,4,1+numtest*4)
         semilogy(gradnorms)
-        xlbl = sprintf('Iter LS, time %f sec', time);
+        xlbl = sprintf('Iter BFGSLS, time %f sec', time);
         xlabel(xlbl);
         ylabel('Norm');
 
         subplot(n,4,2+numtest*4)
         semilogy(alphas)
-        xlabel('Iter LS');
+        xlabel('Iter BFGSLS');
         ylabel('alpha');
 
-        options.linesearchVersion = 2;
+        options.linesearchVersion = 1;
 
         [gradnorms, alphas, time] = bfgsClean(problem, xCur, options);
 
         subplot(n,4,3+numtest*4)
         semilogy(gradnorms)
-        xlbl = sprintf('Iter Qi, time %f sec', time);
+        xlbl = sprintf('Iter LS, time %f sec', time);
         xlabel(xlbl);
         ylabel('Norm ');
 
         subplot(n,4,4+numtest*4)
         semilogy(alphas)
-        xlabel('Iter Qi');
+        xlabel('Iter LS');
         ylabel('alpha');
     end
     
-    filename = sprintf('AutoSave %d', graphs);
-    print('-fillpage',filename,'-dpdf');
+    sprintf('AutoSave %d', graphs);
+    print('-fillpage','FillPageFigure','-dpdf');
 end
 
 %% 
