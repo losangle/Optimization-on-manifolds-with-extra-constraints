@@ -17,7 +17,8 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
     gradnorms = zeros(1,1000);
     gradnorms(1,1) = xCurGradNorm;
     alphas = zeros(1,1000);
-    alpha(1,1) = 1;
+    alphas(1,1) = 1;
+    
 
     options.error = 1e-7;
     options.memory = 10;
@@ -55,6 +56,7 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
         %_______Line Search____________________________
 
         if options.linesearchVersion == 0
+            alpha = 0.5;
             [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
                 xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
             step = M.lincomb(xCur, alpha, p);
@@ -64,18 +66,24 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
             alpha = stepsize/M.norm(xCur, p);
             step = M.lincomb(xCur, alpha, p);
             xNextCost = getCost(problem, xNext);
-        else
+        elseif options.linesearchVersion == 2
             [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, step);
             xNext = M.exp(xCur, step, 1);
+        else
+            alpha = 1;
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.retr(xCur, step, 1);
+            xNextCost = getCost(problem, xNext);
         end
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
-        sk = M.isotransp(xCur, xNext, step);
+        sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.isotransp(xCur, xNext, xCurGradient));
+            -1, M.transp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
@@ -83,8 +91,8 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -94,8 +102,8 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -104,8 +112,8 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
             end
         end
         iter = iter + 1;

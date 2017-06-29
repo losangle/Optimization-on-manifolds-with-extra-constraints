@@ -1,6 +1,6 @@
-function bfgsClean(problem, x, options)
+function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
     
-    
+    timetic = tic();
     M = problem.M;
 
     if ~exist('x','var')|| isempty(x)
@@ -18,6 +18,8 @@ function bfgsClean(problem, x, options)
     gradnorms(1,1) = xCurGradNorm;
     alphas = zeros(1,1000);
     alpha(1,1) = 1;
+    stepsizes = zeros(1,1000);
+    
 
     options.error = 1e-7;
     options.memory = 10;
@@ -57,13 +59,21 @@ function bfgsClean(problem, x, options)
         if options.linesearchVersion == 0
             [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
                 xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
+            alpha = 1;
+            xNext = M.exp(xCur, step, 1);
+            xNextCost = getCost(problem, xNext);
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, p)*alpha;
-        else
+        elseif options.linesearchVersion == 1
             [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
             alpha = stepsize/M.norm(xCur, p);
             step = M.lincomb(xCur, alpha, p);
             xNextCost = getCost(problem, xNext);
+        else
+            [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.exp(xCur, step, 1);
         end
         
         %_______Updating the next iteration_______________
@@ -113,9 +123,9 @@ function bfgsClean(problem, x, options)
         alphas(1,iter+1) = alpha;
     end
     
-    disp(gradnorms(1,1:iter+1))
-    figure
-    semilogy(gradnorms(1,1:iter+1))
+    gradnorms = gradnorms(1,1:iter+1);
+    alphas = alphas(1,1:iter+1);
+    time = toc(timetic);
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
@@ -177,6 +187,27 @@ function [alpha, xNext, xNextCost] = ...
         xNextCost = f0; 
     end
     
-    fprintf('alpha = %.16e\n', alpha)
+%     fprintf('alpha = %.16e\n', alpha)
 end
 
+
+function [costNext,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, alphaprev)
+
+    alpha = alphaprev;
+    costAtx = getCost(problem,x);
+    while (getCost(problem,M.exp(x,p,2*alpha))-costAtx < alpha*pTGradAtx)
+        alpha = 2*alpha;
+    end
+    costNext = getCost(problem,M.exp(x,p,alpha));
+    diff = costNext - costAtx;
+    while (diff>= 0.5*alpha*pTGradAtx)
+        if (diff == 0)
+            alpha = 0;
+            break;
+        end
+        alpha = 0.5 * alpha;
+        costNext = getCost(problem,M.exp(x,p,alpha));
+        diff = costNext - costAtx;
+    end
+%     fprintf('alpha = %.16e\n',alpha);    
+end
