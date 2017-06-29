@@ -1,4 +1,4 @@
-function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
+function [gradnorms, alphas, time] = bfgsnonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -71,12 +71,17 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, step);
             xNext = M.exp(xCur, step, 1);
-        else
+        elseif options.linesearchVersion == 3
             alpha = 1;
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, step);
             xNext = M.retr(xCur, step, 1);
             xNextCost = getCost(problem, xNext);
+        else
+            [xNextCost, alpha] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.exp(xCur, step, 1);            
         end
         
         %_______Updating the next iteration_______________
@@ -194,23 +199,57 @@ function [alpha, xNext, xNextCost] = ...
 end
 
 
-function [costNext,alpha] = linesearchv2(problem, M, x, p, pTGradAtx, alphaprev)
+function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
 
     alpha = alphaprev;
     costAtx = getCost(problem,x);
-    while (getCost(problem,M.exp(x,p,2*alpha))-costAtx < alpha*pTGradAtx)
+    while (getCost(problem,M.exp(x,d,2*alpha))-costAtx < alpha*df0)
         alpha = 2*alpha;
     end
-    costNext = getCost(problem,M.exp(x,p,alpha));
+    costNext = getCost(problem,M.exp(x,d,alpha));
     diff = costNext - costAtx;
-    while (diff>= 0.5*alpha*pTGradAtx)
+    while (diff>= 0.5*alpha*df0)
         if (diff == 0)
             alpha = 0;
             break;
         end
         alpha = 0.5 * alpha;
-        costNext = getCost(problem,M.exp(x,p,alpha));
+        costNext = getCost(problem,M.exp(x,d,alpha));
         diff = costNext - costAtx;
     end
 %     fprintf('alpha = %.16e\n',alpha);    
 end
+
+function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alphaprev)
+    alpha = 0;
+    beta = -1;
+    t = 1;
+    c1 = 0.01; %need adjust
+    c2 = 0.9; %need adjust.
+    counter = 25;
+    while counter > 0
+        xNext = M.retr(xCur, d, t);
+        if (getCost(problem, xNext) > f0 + df0*c1*t)
+            beta = t;
+        elseif diffRetractionOblique(problem, M, alpha, d, xCur, xNext) < c2*df0
+            alpha = t;
+        else
+            break;
+        end
+        if (beta == -1)
+            t = alpha*2;
+        else
+            t = (alpha+beta)/2;
+        end
+    end
+    costNext = getCost(problem, xNext);
+end
+
+
+
+function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
+    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
+end
+
+
+
