@@ -24,7 +24,7 @@ function  [x, cost, info, options] = bfgsManifold(problem, x, options)
     localdefaults.c2 = 0.9;
     localdefaults.amax = 1000;
     localdefaults.memory = 10;
-    localdefaults.linesearchVersion = 1; %0 is Strong Wolfe. 1 is Armijo.
+    localdefaults.linesearchVersion = 0; %0 is Strong Wolfe. 1 is Armijo.
     localdefaults.restart = 1; %1 = TRUE;
     options.debug = 0;
     
