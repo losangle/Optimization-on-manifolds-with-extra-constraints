@@ -247,11 +247,3 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
     costNext = getCost(problem, xNext);
 end
 
-
-
-function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
-    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
-end
-
-
-
