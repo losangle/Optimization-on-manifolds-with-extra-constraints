@@ -1,7 +1,8 @@
-function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [gradnorms, alphas, xCur, time] = euclideannonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
+    dim = M.dim();
 
     if ~exist('x','var')|| isempty(x)
         xCur = x;
@@ -13,22 +14,23 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     
-    
     gradnorms = zeros(1,1000);
     gradnorms(1,1) = xCurGradNorm;
     alphas = zeros(1,1000);
     alphas(1,1) = 1;
-    
+    stepsizes = zeros(1,1000);
+    stepsizes(1,1) = NaN;
 
     options.error = 1e-7;
+    options.linesearchVersion = 4;
 %     options.memory = 10;
 
-
+    Hcore = eye(dim);
+    Hside  = zeros(dim,dim);
+    H = Hcore;
+    
     k = 0;
     iter = 0;
-    sHistory = cell(1, options.memory);
-    yHistory = cell(1, options.memory);
-    rhoHistory = cell(1, options.memory);
     alpha = 1;
     scaleFactor = 1;
     stepsize = 1;
@@ -37,10 +39,10 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
 
     while (1)
         %_______Print Information and stop information________
-        fprintf('%5d\t%+.16e\t%.8e\n', iter, xCurCost, xCurGradNorm);
+        fprintf('%5d\t%+.16e\t%.8e\t%f\n', iter, xCurCost, xCurGradNorm, alpha);
 
         if (xCurGradNorm < options.error)
-            fprintf('Target Reached\b');
+            fprintf('Target Reached\n');
             break;
         end
         if (stepsize <= 1e-10)
@@ -50,8 +52,7 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
 
         %_______Get Direction___________________________
 
-        p = getDirection(M, xCur, xCurGradient, sHistory,...
-            yHistory, rhoHistory, scaleFactor, min(k, options.memory));
+        p = -H*xCurGradient;
 
         %_______Line Search____________________________
 
@@ -86,41 +87,19 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
-        sk = M.transp(xCur, xNext, step);
-        yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+        sk = step; 
+        yk = xNextGradient - xCurGradient; 
 
-        inner_sk_yk = M.inner(xNext, yk, sk);
-        if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
-            rhok = 1/inner_sk_yk;
-            scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
-            if (k>= options.memory)
-                for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
-                end
-                sHistory = sHistory([2:end 1]);
-                sHistory{options.memory} = sk;
-                yHistory = yHistory([2:end 1]);
-                yHistory{options.memory} = yk;
-                rhoHistory = rhoHistory([2:end 1]);
-                rhoHistory{options.memory} = rhok;
-            else
-                for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
-                end
-                sHistory{k+1} = sk;
-                yHistory{k+1} = yk;
-                rhoHistory{k+1} = rhok;
-            end
-            k = k+1;
-        else
-            for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
-            end
-        end
+        scaleFactor = (sk.'*yk) / (yk.'*yk);
+        
+        Hcore =
+        Hside = 
+        H = Hcore*scalreFactor + Hside;
+        
+        
+        
+        
+        
         iter = iter + 1;
         xCur = xNext;
         xCurGradient = xNextGradient;
@@ -225,14 +204,14 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
     alpha = 0;
     beta = inf;
     t = 1;
-    c1 = 0.001; %need adjust
-    c2 = 0.5; %need adjust.
+    c1 = 0.1; %need adjust
+    c2 = 0.9; %need adjust.
     counter = 100;
     while counter > 0
         xNext = M.retr(xCur, d, t);
         if (getCost(problem, xNext) > f0 + df0*c1*t)
             beta = t;
-        elseif diffRetractionOblique(problem, M, alpha, d, xCur, xNext) < c2*df0
+        elseif diffRetractionEuclidean(problem, M, alpha, d, xCur, xNext) < c2*df0
             alpha = t;
         else
             break;
@@ -247,3 +226,6 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
     costNext = getCost(problem, xNext);
 end
 
+function val = diffRetractionEuclidean(problem, M, alpha, d, xCur, xNext)
+    val = M.inner(xNext, getGradient(problem, xNext), d);
+end

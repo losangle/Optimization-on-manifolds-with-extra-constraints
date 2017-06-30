@@ -1,4 +1,4 @@
-function euclidean (cost,grad,dim)
+function euclideansmooth (cost,grad,dim)
     
     %Parameter of convergence
     error = 1e-6;
