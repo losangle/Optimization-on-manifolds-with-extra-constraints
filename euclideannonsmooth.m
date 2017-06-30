@@ -1,4 +1,4 @@
-function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [gradnorms, alphas, xCur, time] = euclideannonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -225,14 +225,14 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
     alpha = 0;
     beta = inf;
     t = 1;
-    c1 = 0.001; %need adjust
-    c2 = 0.5; %need adjust.
+    c1 = 0.1; %need adjust
+    c2 = 0.9; %need adjust.
     counter = 100;
     while counter > 0
         xNext = M.retr(xCur, d, t);
         if (getCost(problem, xNext) > f0 + df0*c1*t)
             beta = t;
-        elseif diffRetractionOblique(problem, M, alpha, d, xCur, xNext) < c2*df0
+        elseif diffRetractionEuclidean(problem, M, alpha, d, xCur, xNext) < c2*df0
             alpha = t;
         else
             break;
@@ -247,11 +247,6 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
     costNext = getCost(problem, xNext);
 end
 
-
-
-function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
-    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
+function val = diffRetractionEuclidean(problem, M, alpha, d, xCur, xNext)
+    val = M.inner(xNext, getGradient(problem, xNext), d);
 end
-
-
-
