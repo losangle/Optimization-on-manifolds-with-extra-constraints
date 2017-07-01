@@ -7,57 +7,29 @@
 function clientnonsmooth
 
     % Create the problem structure.
-    manifold = obliquefactory(3,24);
+    manifold = obliquefactory(3,5);
     problem.M = manifold;
     
     cost = @(X) costFun(X);
-    grad = @(M,X) newgradFun(M,X);
-    gradFunc = @(X) gradFun(X);
-    failedgradFunc = @(X) failedgradFun(X);
+%     grad = @(M,X) newgradFun(M,X);
+    gradFun = @(X) 
     
     
     % Define the problem cost function and its Euclidean gradient.
     problem.cost  = cost;
     problem.grad = grad;  
-% % % 
-     %checkgradient(problem);
+% % 
+    checkgradient(problem);
     
     %Set options
     options.linesearchVersion = 4;
-    options.memory = 200;
+    options.memory = 30;
 
     xCur = problem.M.rand();
 
-   [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, xCur, options);
+    bfgsnonsmooth(problem, xCur, options);
     
 
-    disp(xCur)
-    figure;
-    
-    subplot(2,2,1)
-    semilogy(gradnorms, '.-');
-    xlabel('Iter');
-    ylabel('GradNorms');
-
-    titletest = sprintf('Time: %f', time);
-    title(titletest);
-    
-    subplot(2,2,2)
-    plot(alphas, '.-');
-    xlabel('Iter');
-    ylabel('Alphas');
-
-    subplot(2,2,3)
-    semilogy(stepsizes, '.-');
-    xlabel('Iter');
-    ylabel('stepsizes');
-
-    subplot(2,2,4)
-    semilogy(costs, '.-');
-    xlabel('Iter');
-    ylabel('costs');
-    
-    
 %     bfgsIsometric(problem, xCur, options);
 %    bfgsClean(problem, xCur, options);
 %     %trustregions(problem, xCur, options);
@@ -79,8 +51,8 @@ function clientnonsmooth
         function val = costFun(X)
             Inner = X.'*X;
             Inner(1:size(Inner,1)+1:end) = -2;
-            val = max(Inner(:));
 %             Inner(eye(size(Inner,1))==1) = -2;
+            val = max(Inner(:));
         end
 
     function u = newgradFun(M, X)

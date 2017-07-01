@@ -23,7 +23,7 @@ function euclideansmooth (cost,grad,dim)
             p = -direction(s,y,grad(x),memory);
 
             %Get the stepsize (Default to 1)
-            alpha = linesearch(cost,grad,x,p,c1,c2);
+            alpha = linesearchStrongWolfe(cost,grad,x,p,c1,c2);
             
             %Update
             sk = alpha * p;
@@ -70,7 +70,7 @@ function dir = direction(s,y,gradfk,iter)
 end
 
 %This part follows Nocedal p59-60 for strong Wolfe conditions.
-function alpha = linesearch(cost,grad,x,p,c1,c2)
+function alpha = linesearchStrongWolfe(cost,grad,x,p,c1,c2)
     amax = 1000; %(trial)
     aprev = 0;
     acur = 1;
