@@ -1,4 +1,4 @@
-function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -8,6 +8,20 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
     else
         xCur = M.rand();
     end
+    
+    localdefaults.minstepsize = 1e-10;
+    localdefaults.maxiter = 1000;
+    localdefaults.tolgradnorm = 1e-6;
+    localdefaults.memory = 30;
+    localdefaults.linesearchVersion = 4;
+    
+    % Merge global and local defaults, then merge w/ user options, if any.
+    localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
+    if ~exist('options', 'var') || isempty(options)
+        options = struct();
+    end
+    options = mergeOptions(localdefaults, options);
+   
 
     xCurGradient = getGradient(problem, xCur);
     xCurGradNorm = M.norm(xCur, xCurGradient);
@@ -18,10 +32,10 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
     gradnorms(1,1) = xCurGradNorm;
     alphas = zeros(1,1000);
     alphas(1,1) = 1;
-    
-
-    options.error = 1e-7;
-%     options.memory = 10;
+    stepsizes = zeros(1,1000);
+    stepsizes(1,1) = NaN;
+    costs = zeros(1,1000);
+    costs(1,1) = xCurCost;
 
 
     k = 0;
@@ -39,7 +53,7 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
         %_______Print Information and stop information________
         fprintf('%5d\t%+.16e\t%.8e\n', iter, xCurCost, xCurGradNorm);
 
-        if (xCurGradNorm < options.error)
+        if (xCurGradNorm < options.tolgradnorm)
             fprintf('Target Reached\b');
             break;
         end
@@ -52,7 +66,11 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
 
         p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-
+        if isnan(p(1,1))
+            getDirection(M, xCur, xCurGradient, sHistory,...
+            yHistory, rhoHistory, scaleFactor, min(k, options.memory));
+        end
+        
         %_______Line Search____________________________
 
         if options.linesearchVersion == 0
@@ -86,18 +104,19 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
-        sk = M.transp(xCur, xNext, step);
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
-        if (inner_sk_yk /M.inner(xNext, sk, sk))>= xCurGradNorm
+        arbconst = 0;
+        if (inner_sk_yk /M.inner(xNext, sk, sk))> arbconst * xCurGradNorm
             rhok = 1/inner_sk_yk;
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -107,8 +126,8 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -117,8 +136,8 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
         iter = iter + 1;
@@ -127,12 +146,16 @@ function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
         xCurGradNorm = M.norm(xCur, xNextGradient);
         xCurCost = xNextCost;
         
-        gradnorms(1,iter+1)= xCurGradNorm;
-        alphas(1,iter+1) = alpha;
+        gradnorms(1, iter+1)= xCurGradNorm;
+        alphas(1, iter+1) = alpha;
+        stepsizes(1, iter+1) = stepsize;
+        costs(1, iter+1) = xCurCost;
     end
     
     gradnorms = gradnorms(1,1:iter+1);
     alphas = alphas(1,1:iter+1);
+    costs = costs(1,1:iter+1);
+    stepsizes = stepsizes(1,1:iter+1);
     time = toc(timetic);
 end
 
@@ -248,10 +271,14 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
 end
 
 
-
 function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
-    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
+    [n, m] = size(p);
+    diffRetr = zeros(n, m);
+    for i = 1 : m
+        d = p(:, i);
+        dInner = d.' * d;
+        diffRetr(:,i) = (d-alpha*dInner*xCur(:, i)) /sqrt((1+dInner * alpha^2)^3);
+    end
+    %Can be optimized.
+    slope = M.inner(xNext, getGradient(problem, xNext), diffRetr);
 end
-
-
-

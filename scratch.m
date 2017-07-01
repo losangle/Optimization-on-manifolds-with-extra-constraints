@@ -1,13 +1,12 @@
 clear all, close all, clc;
 
-A=[1,2,3,4;2,3,4,5;3,4,5,6;4,5,6,7];
-A(eye(size(A,1))==1) = -2;
-A
-[Y,I] = max(A(:))
-
-floor(11/4)
-
-B = [1,4,5;2,3,6];
-D = zeros(size(B))
-D(:,1) = B(:,2)
-D(:,2) = B(:,1)
+M = obliquefactory(5,3);
+x1 = M.rand();
+x2 = M.rand();
+u1 = M.randvec(x1);
+u2 = M.randvec(x1);
+inner = M.inner(x1, u1, u2)
+v1 = M.isotransp(x1, x2, u1);
+v2 = M.isotransp(x1, x2, u2);
+inner2  = M.inner(x2, v1, v2)
+inner2 = M.inner(x2, x2, v2)

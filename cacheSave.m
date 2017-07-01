@@ -1,4 +1,4 @@
-function [gradnorms, alphas, time] = cacheSave(problem, x, options)
+function [gradnorms, alphas, xCur, time] = bfgsnonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -17,10 +17,11 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
     gradnorms = zeros(1,1000);
     gradnorms(1,1) = xCurGradNorm;
     alphas = zeros(1,1000);
-    alpha(1,1) = 1;
+    alphas(1,1) = 1;
+    
 
     options.error = 1e-7;
-    options.memory = 10;
+%     options.memory = 10;
 
 
     k = 0;
@@ -55,15 +56,32 @@ function [gradnorms, alphas, time] = cacheSave(problem, x, options)
         %_______Line Search____________________________
 
         if options.linesearchVersion == 0
+            alpha = 0.5;
             [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
                 xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, p)*alpha;
-        else
+        elseif options.linesearchVersion == 1
             [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
             alpha = stepsize/M.norm(xCur, p);
             step = M.lincomb(xCur, alpha, p);
             xNextCost = getCost(problem, xNext);
+        elseif options.linesearchVersion == 2
+            [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.retr(xCur, step, 1);
+        elseif options.linesearchVersion == 3
+            alpha = 1;
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.retr(xCur, step, 1);
+            xNextCost = getCost(problem, xNext);
+        else
+            [xNextCost, alpha] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha);
+            step = M.lincomb(xCur, alpha, p);
+            stepsize = M.norm(xCur, step);
+            xNext = M.retr(xCur, step, 1);            
         end
         
         %_______Updating the next iteration_______________
@@ -142,6 +160,7 @@ function [alpha, xNext, xNextCost] = ...
     contraction_factor = .5;
     optimism = 1/.5;
     suff_decr = 1e-4;
+%     suff_decr = 0;
     max_steps = 25;
     
     % At first, we have no idea of what the step size should be.
@@ -177,6 +196,61 @@ function [alpha, xNext, xNextCost] = ...
         xNextCost = f0; 
     end
     
-    fprintf('alpha = %.16e\n', alpha)
+%     fprintf('alpha = %.16e\n', alpha)
 end
+
+
+function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
+
+    alpha = alphaprev;
+    costAtx = getCost(problem,x);
+    while (getCost(problem,M.exp(x,d,2*alpha))-costAtx < alpha*df0)
+        alpha = 2*alpha;
+    end
+    costNext = getCost(problem,M.exp(x,d,alpha));
+    diff = costNext - costAtx;
+    while (diff>= 0.5*alpha*df0)
+        if (diff == 0)
+            alpha = 0;
+            break;
+        end
+        alpha = 0.5 * alpha;
+        costNext = getCost(problem,M.exp(x,d,alpha));
+        diff = costNext - costAtx;
+    end
+%     fprintf('alpha = %.16e\n',alpha);    
+end
+
+function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alphaprev)
+    alpha = 0;
+    beta = inf;
+    t = 1;
+    c1 = 0.001; %need adjust
+    c2 = 0.5; %need adjust.
+    counter = 100;
+    while counter > 0
+        xNext = M.retr(xCur, d, t);
+        if (getCost(problem, xNext) > f0 + df0*c1*t)
+            beta = t;
+        elseif diffRetractionOblique(problem, M, alpha, d, xCur, xNext) < c2*df0
+            alpha = t;
+        else
+            break;
+        end
+        if (isinf(beta))
+            t = alpha*2;
+        else
+            t = (alpha+beta)/2;
+        end
+        counter = counter - 1;
+    end
+    costNext = getCost(problem, xNext);
+end
+
+
+
+function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
+    slope = 1/sqrt((1+alpha^2)^3) * M.inner(xNext, getGradient(problem, xNext), p - alpha*xCur);
+end
+
 
