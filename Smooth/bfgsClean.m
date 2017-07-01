@@ -21,7 +21,7 @@ function [gradnorms, alphas, time] = bfgsClean(problem, x, options)
     
 
     options.error = 1e-7;
-    options.memory = 10;
+    options.memory = 20;
 
 
     k = 0;
