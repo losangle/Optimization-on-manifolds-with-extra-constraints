@@ -1,37 +1,36 @@
-%smallestinconvexhull.m
-%problem.egrad = grad
-%grad suppose to have one variable.
-%getGradient option 2 was changed.
-%
-
 function clientnonsmooth
 
+    d = 3;
+    n = 24;
     % Create the problem structure.
-    manifold = obliquefactory(3,24);
+    manifold = obliquefactory(d,n);
     problem.M = manifold;
     
     cost = @(X) costFun(X);
-    grad = @(M,X) newgradFun(M,X);
+    grad = @(X) newgradFun(manifold,X);
     gradFunc = @(X) gradFun(X);
     failedgradFunc = @(X) failedgradFun(X);
     
     
     % Define the problem cost function and its Euclidean gradient.
     problem.cost  = cost;
-    problem.grad = grad;  
-% % % 
-     %checkgradient(problem);
+    problem.grad = grad;
+    problem.reallygrad = gradFunc;
+    
+%     checkgradient(problem);
     
     %Set options
     options.linesearchVersion = 4;
-    options.memory = 200;
+    options.memory = 30;
 
     xCur = problem.M.rand();
-
-   [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, xCur, options);
+    options.assumedoptX = problem.M.rand();
+    
+    
+    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, X, time]  = bfgsnonsmooth(problem, xCur, options);
     
 
-    disp(xCur)
+    
     figure;
     
     subplot(2,2,1)
@@ -56,6 +55,71 @@ function clientnonsmooth
     semilogy(costs, '.-');
     xlabel('Iter');
     ylabel('costs');
+    
+    
+    maxdot = costFun(X);
+    
+    % Similarly, even though we did not specify the Hessian, we may still
+    % estimate its spectrum at the solution. It should reflect the
+    % invariance of the cost function under a global rotatioon of the
+    % sphere, which is an invariance under the group O(d) of dimension
+    % d(d-1)/2 : this translates into d(d-1)/2 zero eigenvalues in the
+    % spectrum of the Hessian.
+    % The approximate Hessian is not a linear operator, and is it a
+    % fortiori not symmetric. The result of this computation is thus not
+    % reliable. It does display the zero eigenvalues as expected though.
+    if manifold.dim() < 300
+        evs = real(hessianspectrum(problem, X));
+        figure;
+        stem(1:length(evs), sort(evs), '.');
+        title(['Eigenvalues of the approximate Hessian of the cost ' ...
+               'function at the solution']);
+    end
+    
+    
+    % Give some visualization if the dimension allows
+    if d == 2
+        % For the circle, the optimal solution consists in spreading the
+        % points with angles uniformly sampled in (0, 2pi). This
+        % corresponds to the following value for the max inner product:
+        fprintf('Optimal value for the max inner product: %g\n', cos(2*pi/n));
+        figure;
+        t = linspace(-pi, pi, 201);
+        plot(cos(t), sin(t), '-', 'LineWidth', 3, 'Color', [152,186,220]/255);
+        daspect([1 1 1]);
+        box off;
+        axis off;
+        hold on;
+        plot(X(:, 1), X(:, 2), 'r.', 'MarkerSize', 25);
+        hold off;
+    end
+    if d == 3
+        figure;
+        % Plot the sphere
+        [sphere_x, sphere_y, sphere_z] = sphere(50);
+        handle = surf(sphere_x, sphere_y, sphere_z);
+        set(handle, 'FaceColor', [152,186,220]/255);
+        set(handle, 'FaceAlpha', .5);
+        set(handle, 'EdgeColor', [152,186,220]/255);
+        set(handle, 'EdgeAlpha', .5);
+        daspect([1 1 1]);
+        box off;
+        axis off;
+        hold on;
+        % Add the chosen points
+        Y = 1.02*X;
+        plot3(Y(1, :), Y(2, :), Y(3, :), 'r.', 'MarkerSize', 25);
+        % And connect the points which are at minimal distance,
+        % within some tolerance.
+        min_distance = real(acos(maxdot));
+        connected = real(acos(X.'*X)) <= 1.20*min_distance;
+        [Ic, Jc] = find(triu(connected, 1));
+        for k = 1 : length(Ic)
+            i = Ic(k); j = Jc(k);
+            plot3(Y(1, [i j]), Y(2, [i j]), Y(3, [i j]), 'k-');
+        end
+        hold off;
+    end
     
     
 %     bfgsIsometric(problem, xCur, options);
@@ -84,7 +148,7 @@ function clientnonsmooth
         end
 
     function u = newgradFun(M, X)
-        discrepency = 1e-4;
+        discrepency = 1e-6;
         counter = 0;
         pairs = [];
         Inner = X.'*X;
@@ -100,6 +164,9 @@ function clientnonsmooth
                 end
             end
         end
+%         if counter > 3
+%             what = 1;
+%         end
         grads = cell(1, counter);
         for t = 1 : counter
             val = zeros(size(X));

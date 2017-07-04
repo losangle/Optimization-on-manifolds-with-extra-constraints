@@ -181,10 +181,12 @@ problem.M = manifold;
 problem.cost  = cost;
 problem.egrad = grad;
 
-euclidean(cost,grad,dim)
-[x, cost, info, options] = bfgsCautious(problem);
+xCur = problem.M.rand();
+options = [];
+
+[xCur, xCurCost, info, options]=bfgsSmooth(problem,xCur,options);
 
 figure;
 semilogy([info.iter], [info.gradnorm], '.-');
-xlabel('Iteration number - TrustRegion');
+xlabel('Iteration number ');
 ylabel('Norm of the gradient of f');

@@ -1,4 +1,4 @@
-function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xCur, time] = bfgsnonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -9,11 +9,13 @@ function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(probl
         xCur = M.rand();
     end
     
-    localdefaults.minstepsize = 1e-10;
-    localdefaults.maxiter = 1000;
+    localdefaults.minstepsize = 1e-100;
+    localdefaults.maxiter = 50000;
     localdefaults.tolgradnorm = 1e-6;
     localdefaults.memory = 30;
     localdefaults.linesearchVersion = 4;
+    localdefaults.c1 = 0.02; %need adjust
+    localdefaults.c2 = 0.5; %need adjust.
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -36,6 +38,8 @@ function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(probl
     stepsizes(1,1) = NaN;
     costs = zeros(1,1000);
     costs(1,1) = xCurCost;
+    distToAssumedOptX = zeros(1,1000);
+    distToAssumedOptX(1,1) = M.dist(xCur, options.assumedoptX);
 
 
     k = 0;
@@ -54,11 +58,15 @@ function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(probl
         fprintf('%5d\t%+.16e\t%.8e\n', iter, xCurCost, xCurGradNorm);
 
         if (xCurGradNorm < options.tolgradnorm)
-            fprintf('Target Reached\b');
+            fprintf('Target Reached\n');
             break;
         end
-        if (stepsize <= 1e-10)
+        if (stepsize <= options.minstepsize)
             fprintf('Stepsize too small\n')
+            break;
+        end
+        if (iter > options.maxiter)
+            fprintf('maxiter reached\n')
             break;
         end
 
@@ -96,10 +104,14 @@ function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(probl
             xNext = M.retr(xCur, step, 1);
             xNextCost = getCost(problem, xNext);
         else
-            [xNextCost, alpha] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha);
+            [xNextCost, alpha, fail] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options.c1, options.c2, alpha);
             step = M.lincomb(xCur, alpha, p);
             stepsize = M.norm(xCur, step);
-            xNext = M.retr(xCur, step, 1);            
+            xNext = M.retr(xCur, step, 1);
+            if fail == 1 || stepsize < 1e-14
+                k = 0;
+                continue;
+            end
         end
         
         %_______Updating the next iteration_______________
@@ -150,12 +162,14 @@ function [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(probl
         alphas(1, iter+1) = alpha;
         stepsizes(1, iter+1) = stepsize;
         costs(1, iter+1) = xCurCost;
+        distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
     end
     
     gradnorms = gradnorms(1,1:iter+1);
     alphas = alphas(1,1:iter+1);
     costs = costs(1,1:iter+1);
     stepsizes = stepsizes(1,1:iter+1);
+    distToAssumedOptX = distToAssumedOptX(1, 1:iter+1);
     time = toc(timetic);
 end
 
@@ -166,9 +180,15 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
         inner_s_q{i} = rhoHistory{i}*M.inner(xCur, sHistory{i},q);
         q = M.lincomb(xCur, 1, q, -inner_s_q{i}, yHistory{i});
     end
+    %DEBUGonly
+    fprintf('norm of q = %.16e', M.norm(xCur,q));
+    if M.norm(xCur, q)> 1e+20
+        whatisthis = 1;
+    end
+    
     r = M.lincomb(xCur, scaleFactor, q);
     for i = 1: k
-         omega = rhoHistory{i}*M.inner(xCur, yHistory{i},r);
+         omega = rhoHistory{i}*M.inner(xCur, yHistory{i}, r);
          r = M.lincomb(xCur, 1, r, inner_s_q{i}-omega, sHistory{i});
     end
     dir = M.lincomb(xCur, -1, r);
@@ -227,10 +247,10 @@ function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
 
     alpha = alphaprev;
     costAtx = getCost(problem,x);
-    while (getCost(problem,M.exp(x,d,2*alpha))-costAtx < alpha*df0)
+    while (getCost(problem,M.retr(x,d,2*alpha))-costAtx < alpha*df0)
         alpha = 2*alpha;
     end
-    costNext = getCost(problem,M.exp(x,d,alpha));
+    costNext = getCost(problem,M.retr(x,d,alpha));
     diff = costNext - costAtx;
     while (diff>= 0.5*alpha*df0)
         if (diff == 0)
@@ -238,24 +258,26 @@ function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
             break;
         end
         alpha = 0.5 * alpha;
-        costNext = getCost(problem,M.exp(x,d,alpha));
+        costNext = getCost(problem,M.retr(x,d,alpha));
         diff = costNext - costAtx;
     end
 %     fprintf('alpha = %.16e\n',alpha);    
 end
 
-function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alphaprev)
+function [costNext, t, fail] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, alphaprev)
+    if getDirectionalDerivative(problem, xCur, d) > 0
+        fprintf('directionderivative IS POSITIVE\n');
+    end
     alpha = 0;
+    fail = 0;
     beta = inf;
     t = 1;
-    c1 = 0.001; %need adjust
-    c2 = 0.5; %need adjust.
     counter = 100;
     while counter > 0
         xNext = M.retr(xCur, d, t);
         if (getCost(problem, xNext) > f0 + df0*c1*t)
             beta = t;
-        elseif diffRetractionOblique(problem, M, alpha, d, xCur, xNext) < c2*df0
+        elseif diffretractionOblique(problem, M, t, d, xCur, xNext) < c2*df0
             alpha = t;
         else
             break;
@@ -267,18 +289,23 @@ function [costNext, t] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, alpha
         end
         counter = counter - 1;
     end
+    if counter == 0
+        fprintf('Failed LS \n');
+        fail = 1;
+    end
     costNext = getCost(problem, xNext);
 end
 
 
-function slope = diffRetractionOblique(problem, M, alpha, p, xCur, xNext)
+function slope = diffretractionOblique(problem, M, alpha, p, xCur, xNext)
     [n, m] = size(p);
-    diffRetr = zeros(n, m);
+    diffretr = zeros(n, m);
     for i = 1 : m
         d = p(:, i);
         dInner = d.' * d;
-        diffRetr(:,i) = (d-alpha*dInner*xCur(:, i)) /sqrt((1+dInner * alpha^2)^3);
+        diffretr(:,i) = (d-alpha*dInner*xCur(:, i)) /sqrt((1+dInner * alpha^2)^3);
     end
     %Can be optimized.
-    slope = M.inner(xNext, getGradient(problem, xNext), diffRetr);
+    slope = M.inner(xNext, problem.reallygrad(xNext), diffretr);
+%     slope = M.inner(xNext, getGradient(problem, xNext), diffretr);
 end
