@@ -16,11 +16,11 @@ function clienteuclideannonsmooth
     x = problem.M.rand();
     
     options.memory = 200;
-%    [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmoothlm(problem,x,options);
-     [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmooth(problem,x,options);
-
-%       Smooth Version does not work
-%     euclideansmooth (cost,grad,dim)
+%     bfgsSmooth(problem, x, options);
+%     trustregions(problem, x, options);
+%   [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmoothlm(problem,x,options);
+%      [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmooth(problem,x,options);
+    [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, x, options);
 
     disp(xCur)
     figure;
