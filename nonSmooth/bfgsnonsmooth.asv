@@ -1,4 +1,4 @@
-function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xCur, time] = bfgsnonsmooth(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -10,13 +10,12 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     end
     
     localdefaults.minstepsize = 1e-50;
-    localdefaults.maxiter = 20000;
-    localdefaults.tolgradnorm = 1e-12;
-    localdefaults.memory = 20;
+    localdefaults.maxiter = 50000;
+    localdefaults.tolgradnorm = 1e-6;
+    localdefaults.memory = 30;
     localdefaults.linesearchVersion = 4;
     localdefaults.c1 = 0.0; %need adjust
     localdefaults.c2 = 0.5; %need adjust.
-    localdefaults.discrepency = 1e-6;
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -31,18 +30,16 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     xCurCost = getCost(problem, xCur);
     
     
-    gradnorms = zeros(1,options.maxiter);
+    gradnorms = zeros(1,1000);
     gradnorms(1,1) = xCurGradNorm;
-    alphas = zeros(1,options.maxiter);
+    alphas = zeros(1,1000);
     alphas(1,1) = 1;
-    stepsizes = zeros(1,options.maxiter);
+    stepsizes = zeros(1,1000);
     stepsizes(1,1) = NaN;
-    costs = zeros(1,options.maxiter);
+    costs = zeros(1,1000);
     costs(1,1) = xCurCost;
-    distToAssumedOptX = zeros(1,options.maxiter);
+    distToAssumedOptX = zeros(1,1000);
     distToAssumedOptX(1,1) = M.dist(xCur, options.assumedoptX);
-    xHistory = cell(1,options.maxiter);
-    xHistory{1} = xCur;
 
 
     k = 0;
@@ -55,8 +52,6 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     stepsize = 1;
     lsiters = 1;
     ultimatum = 0;
-    gradonballs_limit = 7;
-    gradonballs = 0;
 
     fprintf(' iter\t               cost val\t    grad. norm\t   lsiters\n');
 
@@ -117,24 +112,18 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
             xNext = M.retr(xCur, step, 1);
             if fail == 1 || stepsize < 1e-14
                 if ultimatum == 1
-                    fprintf('Even descent direction does not help us now\n');
                     break;
-                else
-                    k = 0;
-                    scaleFactor = 1;
-                    ultimatum = 1;
-                    continue;
-                end
-            else
-                ultimatum = 0;
+                k = 0;
+                scaleFactor = 1;
+                continue;
             end
         end
         
         %_______Updating the next iteration_______________
-        xNextGradient = getGradient(problem, xNext, options.discrepency);
-        sk = M.transp(xCur, xNext, step);
+        xNextGradient = getGradient(problem, xNext);
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         arbconst = 0;
@@ -143,8 +132,8 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -154,8 +143,8 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -164,11 +153,10 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
-        
         iter = iter + 1;
         xCur = xNext;
         xCurGradient = xNextGradient;
@@ -180,7 +168,6 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
         stepsizes(1, iter+1) = stepsize;
         costs(1, iter+1) = xCurCost;
         distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
-        xHistory{iter+1} = xCur;
     end
     
     gradnorms = gradnorms(1,1:iter+1);
@@ -188,7 +175,6 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     costs = costs(1,1:iter+1);
     stepsizes = stepsizes(1,1:iter+1);
     distToAssumedOptX = distToAssumedOptX(1, 1:iter+1);
-    xHistory= xHistory(1,1:iter+1);
     time = toc(timetic);
 end
 

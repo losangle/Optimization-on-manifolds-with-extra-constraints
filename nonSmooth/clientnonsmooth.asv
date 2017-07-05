@@ -7,7 +7,7 @@ function clientnonsmooth
     problem.M = manifold;
     
     cost = @(X) costFun(X);
-    grad = @(X) newgradFun(manifold, X);
+    grad = @(X) newgradFun(manifold, X, );
     gradFunc = @(X) gradFun(X);
     failedgradFunc = @(X) failedgradFun(X);
     

@@ -1,7 +1,7 @@
 function minmaxspherenonsmooth
 
-    d = 10;
-    n = 20;
+    d = 3;
+    n = 5;
     % Create the problem structure.
     manifold = spherefactory(d);
     problem.M = manifold;
@@ -43,7 +43,6 @@ function minmaxspherenonsmooth
     profile on;
     options.assumedoptX = X1;
     xCur = problem.M.rand();
-    xCur = [-1; 0; 0];
     [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur, time] = bfgsnonsmooth(problem, xCur, options);
     
     profile off;
@@ -76,8 +75,7 @@ function minmaxspherenonsmooth
     ylabel('costs');
 
     
-    figure
-    surfprofile(problem, xCur);
+    
     
     if d == 3
         figure;
@@ -93,16 +91,16 @@ function minmaxspherenonsmooth
         axis off;
         hold on;
         % Add the chosen points
+        xHistory
         Y = cell2mat(xHistory);
         Y = 1.02*Y;
-        [row, col] = size(Y);
+        [row, col] = size(Y)
         plot3(Y(1,:), Y(2,:), Y(3,:), 'r.', 'MarkerSize', 5);
-        plot3(data(1,:), data(2,:), data(3,:), 'g.', 'MarkerSize', 20);
         % And connect the points which are at minimal distance,
 %         % within some tolerance.
-        for k = 1 : col-1
+        for k = 1 : row-1
             i = k; j = k+1;
-            plot3(Y(1, [i j]), Y(2, [i j]), Y(3, [i j]), 'k-');
+            plot3(Y(1, [i j]), Y(2, [i j], 2), Y([i j], 3), 'k-');
         end
         hold off;
     end
