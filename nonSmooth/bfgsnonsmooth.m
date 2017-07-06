@@ -3,11 +3,13 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     timetic = tic();
     M = problem.M;
 
-    if ~exist('x','var')|| isempty(x)
+    if ~exist('x','var')
         xCur = x;
     else
         xCur = M.rand();
     end
+
+    xCur = x;
     
     localdefaults.minstepsize = 1e-50;
     localdefaults.maxiter = 20000;
@@ -16,7 +18,7 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     localdefaults.linesearchVersion = 4;
     localdefaults.c1 = 0.0; %need adjust
     localdefaults.c2 = 0.5; %need adjust.
-    localdefaults.discrepency = 1e-6;
+    localdefaults.discrepency = 1e-4;
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -27,6 +29,7 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
    
 
     xCurGradient = getGradient(problem, xCur);
+%     xCurGradient = problem.gradAlt(xCur, options.discrepency);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     
@@ -131,10 +134,21 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
         end
         
         %_______Updating the next iteration_______________
-        xNextGradient = getGradient(problem, xNext, options.discrepency);
-        sk = M.transp(xCur, xNext, step);
+        xNextGradient = getGradient(problem, xNext);
+%         xNextGradient = problem.gradAlt(xNext, options.discrepency);        
+%         if M.norm(xNext, problem.gradAlt(xNext, options.discrepency*10)) < 1e-6
+%             fprintf('Descrease Discrepency \n');
+%             options.discrepency = options.discrepency/10;
+%             k=0;
+%             scaleFactor = 1;
+%             continue;
+%         end
+        
+        
+        
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         arbconst = 0;
@@ -143,8 +157,8 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -154,8 +168,8 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -164,11 +178,11 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
-        
+
         iter = iter + 1;
         xCur = xNext;
         xCurGradient = xNextGradient;
@@ -284,7 +298,7 @@ function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
 end
 
 function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, alphaprev)
-    if getDirectionalDerivative(problem, xCur, d) > 0
+    if  problem.M.inner(xCur, problem.grad(xCur), d) > 0
         fprintf('directionderivative IS POSITIVE\n');
     end
     alpha = 0;
