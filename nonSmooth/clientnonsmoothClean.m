@@ -1,12 +1,12 @@
 function clientnonsmoothClean
 
+    rng(161616);
     d = 3;
     n = 8;
     % Create the problem structure.
     manifold = obliquefactory(d,n);
     problem.M = manifold;
-
-    discrepency = 1e-4;
+    discrepency = 1e-2;
     
     cost = @(X) costFun(X);
     subgrad = @(X) subgradFun(manifold, X, discrepency);
@@ -23,6 +23,7 @@ function clientnonsmoothClean
 
     %Set options
     options.memory = 20;
+    options.discrepency = 1e-2;
 
     xCur = problem.M.rand();
 
@@ -30,43 +31,7 @@ function clientnonsmoothClean
     profile on;
 
     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
-
-    figure
-    h = logspace(-15, 1, 501);
-    vals = zeros(1, 501);
-    for iter = 1:501
-        vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
-    end
-    loglog(h, vals)
-
-%     discrepency = discrepency/10;
-%     subgrad = @(X) subgradFun(manifold, X, discrepency);
-%     problem.grad = subgrad;
-%     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
-%     figure
-%     h = logspace(-15, 1, 501);
-%     vals = zeros(1, 501);
-%     for iter = 1:501
-%         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
-%     end
-%     loglog(h, vals)
-% 
-%     discrepency = discrepency/10;
-%     subgrad = @(X) subgradFun(manifold, X, discrepency);
-%     problem.grad = subgrad;
-%     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
-%     figure
-%     h = logspace(-15, 1, 501);
-%     vals = zeros(1, 501);
-%     for iter = 1:501
-%         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
-%     end
-%     loglog(h, vals)
-% 
-%     discrepency = discrepency/10;
-%     subgrad = @(X) subgradFun(manifold, X, discrepency);
-%     problem.grad = subgrad;
-%     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
+    
 %     figure
 %     h = logspace(-15, 1, 501);
 %     vals = zeros(1, 501);

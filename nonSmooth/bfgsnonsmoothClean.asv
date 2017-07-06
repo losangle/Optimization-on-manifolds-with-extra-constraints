@@ -1,22 +1,21 @@
-function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
+function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     
     timetic = tic();
     M = problem.M;
 
     if ~exist('x','var')
         xCur = M.rand();
-    else
+    else 
         xCur = x;
     end
     
     localdefaults.minstepsize = 1e-50;
-    localdefaults.maxiter = 20000;
+    localdefaults.maxiter = 10000;
     localdefaults.tolgradnorm = 1e-12;
     localdefaults.memory = 20;
-    localdefaults.linesearchVersion = 4;
-    localdefaults.c1 = 0.0; %need adjust
-    localdefaults.c2 = 0.5; %need adjust.
-    localdefaults.discrepency = 1e-4;
+    localdefaults.c1 = 0.0; 
+    localdefaults.c2 = 0.5;
+    localdefaults.discrepency = 1e-10;
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -25,12 +24,10 @@ function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
     end
     options = mergeOptions(localdefaults, options);
    
-
-    xCurGradient = getGradient(problem, xCur);
-%     xCurGradient = problem.gradAlt(xCur, options.discrepency);
+%     xCurGradient = getGradient(problem, xCur);
+    xCurGradient = problem.gradAlt(xCur, options.discrepency);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
-    
     
     k = 0;
     iter = 0;
@@ -40,29 +37,32 @@ function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
     alpha = 1;
     scaleFactor = 1;
     stepsize = 1;
+    existsAssumedoptX = exist('options','var') && ~isempty(options) && exist('options.assumedoptX', 'var');
     lsiters = 1;
     ultimatum = 0;
     
     stats.gradnorms = zeros(1,options.maxiter);
-    stats.gradnorms(1,1) = xCurGradNorm;
     stats.alphas = zeros(1,options.maxiter);
-    stats.alphas(1,1) = 1;
     stats.stepsizes = zeros(1,options.maxiter);
-    stats.stepsizes(1,1) = NaN;
     stats.costs = zeros(1,options.maxiter);
-    stats.costs(1,1) = xCurCost;
-    if exist('options','var') && ~isempty(options) && exist('options.assumedoptX', 'var')
-        
-        stats.distToAssumedOptX = zeros(1,options.maxiter);
-     stats.distToAssumedOptX(1,1) = M.dist(xCur, options.assumedoptX);
     stats.xHistory = cell(1,options.maxiter);
-    stats.xHistory{1} = xCur;
-
-
-
+    if existsAssumedoptX
+        stats.distToAssumedOptX = zeros(1,options.maxiter);
+    end
+    
+    savestats();
 
     fprintf(' iter\t               cost val\t    grad. norm\t   lsiters\n');
 
+    
+%     if M.norm(xNext, problem.gradAlt(xNext, options.discrepency*10)) < 1e-6
+%         options.discrepency = options.discrepency/10;
+%         fprintf('Descrease Discrepency up to %.16e\n', options.discrepency);
+%         k=0;
+%         scaleFactor = 1;
+%         continue;
+%     end
+    
     while (1)
         %_______Print Information and stop information________
         fprintf('%5d\t%+.16e\t%.8e\t %d\n', iter, xCurCost, xCurGradNorm, lsiters);
@@ -86,9 +86,12 @@ function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
         
         %_______Line Search____________________________
+        dir_derivative = M.inner(xCur,xCurGradient,p);
+        if  dir_derivative> 0
+            fprintf('directionderivative IS POSITIVE\n');
+        end
 
-
-        [xNextCost, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options.c1, options.c2, alpha);
+        [xNextCost, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, dir_derivative, options.c1, options.c2);
         step = M.lincomb(xCur, alpha, p);
         stepsize = M.norm(xCur, step);
         xNext = M.retr(xCur, step, 1);
@@ -108,15 +111,8 @@ function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
        
         
         %_______Updating the next iteration_______________
-        xNextGradient = getGradient(problem, xNext);
-%         xNextGradient = problem.gradAlt(xNext, options.discrepency);        
-%         if M.norm(xNext, problem.gradAlt(xNext, options.discrepency*10)) < 1e-6
-%             fprintf('Descrease Discrepency \n');
-%             options.discrepency = options.discrepency/10;
-%             k=0;
-%             scaleFactor = 1;
-%             continue;
-%         end
+%         xNextGradient = getGradient(problem, xNext);
+        xNextGradient = problem.gradAlt(xNext, options.discrepency);        
         
         sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
@@ -164,22 +160,28 @@ function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
         savestats()
     end
     
-    stats.gradnorms = gradnorms(1,1:iter+1);
-    stats.alphas = alphas(1,1:iter+1);
-    stats.costs = costs(1,1:iter+1);
-    stats.stepsizes = stepsizes(1,1:iter+1);
-    stats.distToAssumedOptX = distToAssumedOptX(1, 1:iter+1);
-    stats.xHistory= xHistory(1,1:iter+1);
+    stats.gradnorms = stats.gradnorms(1,1:iter+1);
+    stats.alphas = stats.alphas(1,1:iter+1);
+    stats.costs = stats.costs(1,1:iter+1);
+    stats.stepsizes = stats.stepsizes(1,1:iter+1);
+    stats.xHistory= stats.xHistory(1,1:iter+1);
     stats.time = toc(timetic);
+    if existsAssumedoptX
+        stats.distToAssumedOptX = stats.distToAssumedOptX(1, 1:iter+1);
+    end
+    finalX = xCur;
     
     function savestats()
         stats.gradnorms(1, iter+1)= xCurGradNorm;
         stats.alphas(1, iter+1) = alpha;
         stats.stepsizes(1, iter+1) = stepsize;
         stats.costs(1, iter+1) = xCurCost;
-        stats.distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
+        if existsAssumedoptX
+            stats.distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
+        end
         stats.xHistory{iter+1} = xCur;
     end
+
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
@@ -189,12 +191,6 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
         inner_s_q{i} = rhoHistory{i}*M.inner(xCur, sHistory{i},q);
         q = M.lincomb(xCur, 1, q, -inner_s_q{i}, yHistory{i});
     end
-    %DEBUGonly
-    fprintf('norm of q = %.16e', M.norm(xCur,q));
-    if M.norm(xCur, q)> 1e+20
-        whatisthis = 1;
-    end
-    
     r = M.lincomb(xCur, scaleFactor, q);
     for i = 1: k
          omega = rhoHistory{i}*M.inner(xCur, yHistory{i}, r);
@@ -204,79 +200,7 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
 end
 
 
-function [alpha, xNext, xNextCost] = ...
-                  linesearchBFGS(problem, x, d, f0, df0, alphaprev)
-
-    % Backtracking default parameters. These can be overwritten in the
-    % options structure which is passed to the solver.
-    contraction_factor = .5;
-    optimism = 1/.5;
-    suff_decr = 1e-4;
-%     suff_decr = 0;
-    max_steps = 25;
-    
-    % At first, we have no idea of what the step size should be.
-    alpha = alphaprev * optimism;
-
-    % Make the chosen step and compute the cost there.
-    xNext = problem.M.retr(x, d, alpha);
-    xNextCost = getCost(problem, xNext);
-    cost_evaluations = 1;
-    
-    % Backtrack while the Armijo criterion is not satisfied
-    while xNextCost > f0 + suff_decr*alpha*df0
-        
-        % Reduce the step size,
-        alpha = contraction_factor * alpha;
-        
-        % and look closer down the line
-        xNext = problem.M.retr(x, d, alpha);
-        xNextCost = getCost(problem, xNext);
-        cost_evaluations = cost_evaluations + 1;
-        
-        % Make sure we don't run out of budget
-        if cost_evaluations >= max_steps
-            break;
-        end
-        
-    end
-    
-    % If we got here without obtaining a decrease, we reject the step.
-    if xNextCost > f0
-        alpha = 0;
-        xNext = x;
-        xNextCost = f0; 
-    end
-    
-%     fprintf('alpha = %.16e\n', alpha)
-end
-
-
-function [costNext,alpha] = linesearchv2(problem, M, x, d, df0, alphaprev)
-
-    alpha = alphaprev;
-    costAtx = getCost(problem,x);
-    while (getCost(problem,M.retr(x,d,2*alpha))-costAtx < alpha*df0)
-        alpha = 2*alpha;
-    end
-    costNext = getCost(problem,M.retr(x,d,alpha));
-    diff = costNext - costAtx;
-    while (diff>= 0.5*alpha*df0)
-        if (diff == 0)
-            alpha = 0;
-            break;
-        end
-        alpha = 0.5 * alpha;
-        costNext = getCost(problem,M.retr(x,d,alpha));
-        diff = costNext - costAtx;
-    end
-%     fprintf('alpha = %.16e\n',alpha);    
-end
-
-function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, alphaprev)
-    if  problem.M.inner(xCur, problem.grad(xCur), d) > 0
-        fprintf('directionderivative IS POSITIVE\n');
-    end
+function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2)
     alpha = 0;
     fail = 0;
     beta = inf;

@@ -1,4 +1,4 @@
-function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
+function [stats, finalX] = bfgsnonsmoothCleanCompare(problem, x, options)
     
     timetic = tic();
     M = problem.M;
@@ -15,7 +15,7 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     localdefaults.memory = 15;
     localdefaults.c1 = 0.0; 
     localdefaults.c2 = 0.5;
-    localdefaults.discrepency = 1e-10;
+    localdefaults.discrepency = 1e-6;
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -85,6 +85,7 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
         p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
         
+%         p = -getGradient(problem, xCur);
         
         %_______Line Search____________________________
         dir_derivative = M.inner(xCur,xCurGradient,p);
