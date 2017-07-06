@@ -1,15 +1,13 @@
-function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur, time] = bfgsnonsmooth(problem, x, options)
+function [stats, xCur] = bfgsnonsmoothClean(problem, x, options)
     
     timetic = tic();
     M = problem.M;
 
     if ~exist('x','var')
-        xCur = x;
-    else
         xCur = M.rand();
+    else
+        xCur = x;
     end
-
-    xCur = x;
     
     localdefaults.minstepsize = 1e-50;
     localdefaults.maxiter = 20000;
@@ -34,20 +32,6 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     xCurCost = getCost(problem, xCur);
     
     
-    gradnorms = zeros(1,options.maxiter);
-    gradnorms(1,1) = xCurGradNorm;
-    alphas = zeros(1,options.maxiter);
-    alphas(1,1) = 1;
-    stepsizes = zeros(1,options.maxiter);
-    stepsizes(1,1) = NaN;
-    costs = zeros(1,options.maxiter);
-    costs(1,1) = xCurCost;
-    distToAssumedOptX = zeros(1,options.maxiter);
-    distToAssumedOptX(1,1) = M.dist(xCur, options.assumedoptX);
-    xHistory = cell(1,options.maxiter);
-    xHistory{1} = xCur;
-
-
     k = 0;
     iter = 0;
     sHistory = cell(1, options.memory);
@@ -58,8 +42,24 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
     stepsize = 1;
     lsiters = 1;
     ultimatum = 0;
-    gradonballs_limit = 7;
-    gradonballs = 0;
+    
+    stats.gradnorms = zeros(1,options.maxiter);
+    stats.gradnorms(1,1) = xCurGradNorm;
+    stats.alphas = zeros(1,options.maxiter);
+    stats.alphas(1,1) = 1;
+    stats.stepsizes = zeros(1,options.maxiter);
+    stats.stepsizes(1,1) = NaN;
+    stats.costs = zeros(1,options.maxiter);
+    stats.costs(1,1) = xCurCost;
+    if exist('options','var') && ~isempty(options) && exist('options.assumedoptX', 'var')
+        
+        stats.distToAssumedOptX = zeros(1,options.maxiter);
+     stats.distToAssumedOptX(1,1) = M.dist(xCur, options.assumedoptX);
+    stats.xHistory = cell(1,options.maxiter);
+    stats.xHistory{1} = xCur;
+
+
+
 
     fprintf(' iter\t               cost val\t    grad. norm\t   lsiters\n');
 
@@ -84,54 +84,28 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
 
         p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-        if isnan(p(1,1))
-            getDirection(M, xCur, xCurGradient, sHistory,...
-            yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-        end
         
         %_______Line Search____________________________
 
-        if options.linesearchVersion == 0
-            alpha = 0.5;
-            [alpha, xNext, xNextCost] = linesearchBFGS(problem,...
-                xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), alpha); %Check if df0 is right
-            step = M.lincomb(xCur, alpha, p);
-            stepsize = M.norm(xCur, p)*alpha;
-        elseif options.linesearchVersion == 1
-            [stepsize, xNext, newkey, lsstats] =linesearch(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p));
-            alpha = stepsize/M.norm(xCur, p);
-            step = M.lincomb(xCur, alpha, p);
-            xNextCost = getCost(problem, xNext);
-        elseif options.linesearchVersion == 2
-            [xNextCost,alpha] = linesearchv2(problem, M, xCur, p, M.inner(xCur,xCurGradient,p), alpha);
-            step = M.lincomb(xCur, alpha, p);
-            stepsize = M.norm(xCur, step);
-            xNext = M.retr(xCur, step, 1);
-        elseif options.linesearchVersion == 3
-            alpha = 1;
-            step = M.lincomb(xCur, alpha, p);
-            stepsize = M.norm(xCur, step);
-            xNext = M.retr(xCur, step, 1);
-            xNextCost = getCost(problem, xNext);
-        else
-            [xNextCost, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options.c1, options.c2, alpha);
-            step = M.lincomb(xCur, alpha, p);
-            stepsize = M.norm(xCur, step);
-            xNext = M.retr(xCur, step, 1);
-            if fail == 1 || stepsize < 1e-14
-                if ultimatum == 1
-                    fprintf('Even descent direction does not help us now\n');
-                    break;
-                else
-                    k = 0;
-                    scaleFactor = 1;
-                    ultimatum = 1;
-                    continue;
-                end
+
+        [xNextCost, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options.c1, options.c2, alpha);
+        step = M.lincomb(xCur, alpha, p);
+        stepsize = M.norm(xCur, step);
+        xNext = M.retr(xCur, step, 1);
+        if fail == 1 || stepsize < 1e-14
+            if ultimatum == 1
+                fprintf('Even descent direction does not help us now\n');
+                break;
             else
-                ultimatum = 0;
+                k = 0;
+                scaleFactor = 1;
+                ultimatum = 1;
+                continue;
             end
+        else
+            ultimatum = 0;
         end
+       
         
         %_______Updating the next iteration_______________
         xNextGradient = getGradient(problem, xNext);
@@ -143,8 +117,6 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
 %             scaleFactor = 1;
 %             continue;
 %         end
-        
-        
         
         sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
@@ -189,21 +161,25 @@ function [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur
         xCurGradNorm = M.norm(xCur, xNextGradient);
         xCurCost = xNextCost;
         
-        gradnorms(1, iter+1)= xCurGradNorm;
-        alphas(1, iter+1) = alpha;
-        stepsizes(1, iter+1) = stepsize;
-        costs(1, iter+1) = xCurCost;
-        distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
-        xHistory{iter+1} = xCur;
+        savestats()
     end
     
-    gradnorms = gradnorms(1,1:iter+1);
-    alphas = alphas(1,1:iter+1);
-    costs = costs(1,1:iter+1);
-    stepsizes = stepsizes(1,1:iter+1);
-    distToAssumedOptX = distToAssumedOptX(1, 1:iter+1);
-    xHistory= xHistory(1,1:iter+1);
-    time = toc(timetic);
+    stats.gradnorms = gradnorms(1,1:iter+1);
+    stats.alphas = alphas(1,1:iter+1);
+    stats.costs = costs(1,1:iter+1);
+    stats.stepsizes = stepsizes(1,1:iter+1);
+    stats.distToAssumedOptX = distToAssumedOptX(1, 1:iter+1);
+    stats.xHistory= xHistory(1,1:iter+1);
+    stats.time = toc(timetic);
+    
+    function savestats()
+        stats.gradnorms(1, iter+1)= xCurGradNorm;
+        stats.alphas(1, iter+1) = alpha;
+        stats.stepsizes(1, iter+1) = stepsize;
+        stats.costs(1, iter+1) = xCurCost;
+        stats.distToAssumedOptX(1, iter+1) = M.dist(xCur, options.assumedoptX);
+        stats.xHistory{iter+1} = xCur;
+    end
 end
 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)

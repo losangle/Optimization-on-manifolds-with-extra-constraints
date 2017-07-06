@@ -1,36 +1,88 @@
 function clientnonsmooth
 
     d = 3;
-    n = 24;
+    n = 8;
     % Create the problem structure.
     manifold = obliquefactory(d,n);
     problem.M = manifold;
     
+    discrepency = 1e-4;
+    
     cost = @(X) costFun(X);
-    grad = @(X) newgradFun(manifold,X);
+    grad = @(X) newgradFun(manifold, X, discrepency);
     gradFunc = @(X) gradFun(X);
     failedgradFunc = @(X) failedgradFun(X);
-    
+    gradAlt = @(X, discre) newgradFun(manifold, X, discre);
     
     % Define the problem cost function and its Euclidean gradient.
     problem.cost  = cost;
     problem.grad = grad;
+    problem.gradAlt = gradAlt;
     problem.reallygrad = gradFunc;
     
 %     checkgradient(problem);
     
     %Set options
     options.linesearchVersion = 4;
-    options.memory = 30;
+    options.memory = 20;
 
     xCur = problem.M.rand();
     options.assumedoptX = problem.M.rand();
     
+    profile clear;
+    profile on;
+
+    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, X, time]  = bfgsnonsmooth(problem, xCur, options);
     
-    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, X, time]  = bfgsnonsmooth(problem, xCur, options);
+    figure
+    h = logspace(-15, 1, 501);
+    vals = zeros(1, 501);
+    for iter = 1:501
+    vals(1,iter) = problem.M.norm(X, newgradFun(problem.M, X, h(iter)));
+    end
+    loglog(h, vals)
+    
+    discrepency = discrepency/10;
+    grad = @(X) newgradFun(manifold, X, discrepency);
+    problem.grad = grad;
+    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, X, time]  = bfgsnonsmooth(problem, X, options);
+    figure
+    h = logspace(-15, 1, 501);
+    vals = zeros(1, 501);
+    for iter = 1:501
+    vals(1,iter) = problem.M.norm(X, newgradFun(problem.M, X, h(iter)));
+    end
+    loglog(h, vals)
+    
+    discrepency = discrepency/10;
+    grad = @(X) newgradFun(manifold, X, discrepency);
+    problem.grad = grad;
+    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, X, time]  = bfgsnonsmooth(problem, X, options);
+    figure
+    h = logspace(-15, 1, 501);
+    vals = zeros(1, 501);
+    for iter = 1:501
+    vals(1,iter) = problem.M.norm(X, newgradFun(problem.M, X, h(iter)));
+    end
+    loglog(h, vals)
+    
+    discrepency = discrepency/10;
+    grad = @(X) newgradFun(manifold, X, discrepency);
+    problem.grad = grad;
+    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, X, time]  = bfgsnonsmooth(problem, X, options);
+    figure
+    h = logspace(-15, 1, 501);
+    vals = zeros(1, 501);
+    for iter = 1:501
+    vals(1,iter) = problem.M.norm(X, newgradFun(problem.M, X, h(iter)));
+    end
+    loglog(h, vals)
     
 
-    
+    profile off;
+    profile report
+   
+   
     figure;
     
     subplot(2,2,1)
@@ -55,6 +107,8 @@ function clientnonsmooth
     semilogy(costs, '.-');
     xlabel('Iter');
     ylabel('costs');
+    
+
     
     
     maxdot = costFun(X);
@@ -147,8 +201,10 @@ function clientnonsmooth
 %             Inner(eye(size(Inner,1))==1) = -2;
         end
 
-    function u = newgradFun(M, X)
-        discrepency = 1e-6;
+    function u = newgradFun(M, X, discrepency)
+        if (~exist('discrepency', 'var'))
+            discrepency = 1e-5;
+        end
         counter = 0;
         pairs = [];
         Inner = X.'*X;
@@ -168,13 +224,13 @@ function clientnonsmooth
 %             what = 1;
 %         end
         grads = cell(1, counter);
-        for t = 1 : counter
+        for iterator = 1 : counter
             val = zeros(size(X));
-            pair = pairs{t};
+            pair = pairs{iterator};
             Innerprod = X(:, pair(1)).'*X(:, pair(2));
             val(:, pair(1)) = X(:, pair(2)) - Innerprod*X(:,pair(1));
             val(:, pair(2)) = X(:, pair(1)) - Innerprod*X(:,pair(2));
-            grads{t} = val;
+            grads{iterator} = val;
         end
         [u_norm, coeffs, u] = smallestinconvexhull(M, X, grads);
         %             fprintf('counter = %d\n', counter);
