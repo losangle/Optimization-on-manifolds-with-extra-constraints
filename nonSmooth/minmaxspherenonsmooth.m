@@ -22,8 +22,7 @@ function minmaxspherenonsmooth
     problem.reallygrad = grad;
     
     %Set options
-    options.linesearchVersion = 4;
-    options.memory = 400;
+    options = [];
 
     X1 = problem.M.rand();
     X2 = problem.M.rand();
@@ -31,8 +30,8 @@ function minmaxspherenonsmooth
     options.assumedoptX = problem.M.rand();
     while (1)
         xCur = problem.M.rand();
-        [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, X1, time] = bfgsnonsmooth(problem, xCur, options);
-        if M.dist(X1,X2)+M.dist(X1,X3)+M.dist(X2,X3) <= 1e-5
+       [stats, X1] = bfgsnonsmoothClean(problem, xCur, options);
+        if M.dist(X1,X2)+M.dist(X1,X3)+M.dist(X2,X3) <= 1e-3
             break;
         else
             X3 = X2;
@@ -43,42 +42,21 @@ function minmaxspherenonsmooth
     profile on;
     options.assumedoptX = X1;
     xCur = problem.M.rand();
-    xCur = [-1; 0; 0];
-    [gradnorms, alphas, stepsizes, costs, distToAssumedOptX, xHistory, xCur, time] = bfgsnonsmooth(problem, xCur, options);
+    xCur(1,1) = abs(xCur(1,1));
+   [stats, XCur] = bfgsnonsmoothClean(problem, xCur, options);
     
     profile off;
     profile report
     
     disp(xCur)
-    figure;
-    
-    subplot(2,2,1)
-    semilogy(gradnorms, '.-');
-    xlabel('Iter');
-    ylabel('GradNorms');
-
-    titletest = sprintf('Time: %f', time);
-    title(titletest);
-    
-    subplot(2,2,2)
-    plot(alphas, '.-');
-    xlabel('Iter');
-    ylabel('Alphas');
-
-    subplot(2,2,3)
-    semilogy(stepsizes, '.-');
-    xlabel('Iter');
-    ylabel('stepsizes');
-
-    subplot(2,2,4)
-    semilogy(distToAssumedOptX, '.-');
-    xlabel('Iter');
-    ylabel('costs');
+    displaystats(stats)
 
     
     figure
     surfprofile(problem, xCur);
-    
+    hold all
+    plot3(0,0,getCost(problem, xCur), 'r.', 'MarkerSize', 25);
+    hold off
     if d == 3
         figure;
         % Plot the sphere
@@ -118,5 +96,38 @@ function minmaxspherenonsmooth
             Inner = - x.'*data;
             [maxval,pos] = max(Inner(:));
             val = - data(:, pos);
+        end
+    
+    
+        function displaystats(stats)
+
+            finalcost = stats.costs(end);
+            for numcost = 1 : length(stats.costs)
+                stats.costs(1,numcost) = stats.costs(1,numcost) - finalcost;
+            end
+            figure;
+
+            subplot(2,2,1)
+            semilogy(stats.gradnorms, '.-');
+            xlabel('Iter');
+            ylabel('GradNorms');
+
+            titletest = sprintf('Time: %f', stats.time);
+            title(titletest);
+
+            subplot(2,2,2)
+            plot(stats.alphas, '.-');
+            xlabel('Iter');
+            ylabel('Alphas');
+
+            subplot(2,2,3)
+            semilogy(stats.stepsizes, '.-');
+            xlabel('Iter');
+            ylabel('stepsizes');
+
+            subplot(2,2,4)
+            semilogy(stats.costs, '.-');
+            xlabel('Iter');
+            ylabel('costs');
         end
 end
