@@ -84,11 +84,11 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
                 yHistory = cell(1, options.memory);
                 rhoHistory = cell(1, options.memory);
                 alpha = 1;
-                scaleFactor = 1;
-                stepsize = 1;
+                scaleFactor = stepsize * 2/xCurGradNorm; %Need to reconsider
                 xCurGradient = problem.gradAlt(xCur, options.discrepency);
                 xCurGradNorm = M.norm(xCur, xCurGradient);
                 xCurCost = getCost(problem, xCur);
+                stepsize = 1;
                 continue;
             else
                 break;
@@ -128,31 +128,31 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
 
         [xNextCost, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, dir_derivative, options.c1, options.c2, options.lsmaxcounter);
         step = M.lincomb(xCur, alpha, p);
-        stepsize = M.norm(xCur, step);
-        xNext = M.retr(xCur, step, 1);
-        if fail == 1 || stepsize < 1e-14
+        newstepsize = M.norm(xCur, step);
+        if fail == 1 || newstepsize < 1e-14
             if ultimatum == 1
                 fprintf('Even descent direction does not help us now\n');
                 pushforward = 1;
                 continue;
             else
                 k = 0;
-                scaleFactor = 1;
+                scaleFactor = stepsize*2/xCurGradNorm;
                 ultimatum = 1;
                 continue;
             end
         else
             ultimatum = 0;
         end
-       
+        stepsize = newstepsize;
+        xNext = M.retr(xCur, step, 1);
         
         %_______Updating the next iteration_______________
 %         xNextGradient = getGradient(problem, xNext);
         xNextGradient = problem.gradAlt(xNext, options.discrepency);        
         
-        sk = M.transp(xCur, xNext, step);
+        sk = M.isotransp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+            -1, M.isotransp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         arbconst = 0;
@@ -161,8 +161,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -172,8 +172,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -182,8 +182,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
             end
         end
 
@@ -237,6 +237,15 @@ end
 
 
 function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
+    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
+    if df0 >=0
+        fprintf('LS failure by wrong direction');
+        t = 1;
+        fail = 1;
+        costNext = inf;
+        lsiters = -1;
+        return
+    end
     alpha = 0;
     fail = 0;
     beta = inf;

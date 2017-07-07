@@ -1,6 +1,6 @@
 function clientnonsmoothClean
 
-    rng(161616);
+%     rng(161616);
     d = 3;
     n = 24;
     % Create the problem structure.
@@ -32,13 +32,13 @@ function clientnonsmoothClean
 
     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
     
-    figure
-    h = logspace(-15, 1, 501);
-    vals = zeros(1, 501);
-    for iter = 1:501
-        vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
-    end
-    loglog(h, vals)
+%     figure
+%     h = logspace(-15, 1, 501);
+%     vals = zeros(1, 501);
+%     for iter = 1:501
+%         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
+%     end
+%     loglog(h, vals)
     
 %     options.discrepency = options.discrepency/10;
 % %     subgrad = @(X) subgradFun(manifold, X, discrepency);
