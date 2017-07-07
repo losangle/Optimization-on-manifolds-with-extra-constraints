@@ -1,4 +1,5 @@
 function B
-    rng(161616);
-    A = rand(2,2)
+    a = cell(1,5);
+    a{1} = [1,2];
+    length(a)
 end
