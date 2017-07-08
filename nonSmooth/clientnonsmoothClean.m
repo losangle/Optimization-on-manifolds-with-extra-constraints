@@ -22,10 +22,8 @@ function clientnonsmoothClean
 %     checkgradient(problem);
 
     %Set options
-    options.memory = 20;
-    options.discrepency = 1e-2;
-
     xCur = problem.M.rand();
+    options = [];
 
     profile clear;
     profile on;
@@ -39,6 +37,8 @@ function clientnonsmoothClean
 %         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
 %     end
 %     loglog(h, vals)
+    
+    A(problem, X);
     
 %     options.discrepency = options.discrepency/10;
 % %     subgrad = @(X) subgradFun(manifold, X, discrepency);
@@ -88,7 +88,7 @@ function clientnonsmoothClean
             val(:, pair(1, 2)) = X(:, pair(1, 1)) - Innerprod*X(:,pair(1, 2));
             grads{iterator} = val;
         end
-        [u_norm, coeffs, u] = smallestinconvexhull(M, X, grads);
+        [u_norm, coeffs, u] = smallestinconvexhull(M, X, grads, min(discrepency, 1e-15));
     end
 
     function val = gradFun(X)

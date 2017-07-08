@@ -12,13 +12,13 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     localdefaults.minstepsize = 1e-50;
     localdefaults.maxiter = 10000;
     localdefaults.tolgradnorm = 1e-3;  %iterimgradnorm that is used during discrepency < maxdiscrepency
-    localdefaults.finalgradnorm = 1e-12;
-    localdefaults.memory = 15;
+    localdefaults.finalgradnorm = 1e-3;
+    localdefaults.memory = 30;
     localdefaults.c1 = 0.0; 
     localdefaults.c2 = 0.5;
-    localdefaults.discrepency = 1e-3;
+    localdefaults.discrepency = 1e-4;
     localdefaults.discrepencydownscalefactor = 1e-1; 
-    localdefaults.maxdiscrepency = 1e-12;
+    localdefaults.maxdiscrepency = 1e-4;
     localdefaults.lsmaxcounter = 50;
     
     % Merge global and local defaults, then merge w/ user options, if any.
@@ -28,8 +28,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     end
     options = mergeOptions(localdefaults, options);
    
-%     xCurGradient = getGradient(problem, xCur);
-    xCurGradient = problem.gradAlt(xCur, options.discrepency);
+    xCurGradient = getGradient(problem, xCur);
+%     xCurGradient = problem.gradAlt(xCur, options.discrepency);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     
@@ -61,14 +61,6 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     fprintf(' iter\t               cost val\t    grad. norm\t   lsiters\n');
 
     
-%     if M.norm(xNext, problem.gradAlt(xNext, options.discrepency*10)) < 1e-6
-%         options.discrepency = options.discrepency/10;
-%         fprintf('Descrease Discrepency up to %.16e\n', options.discrepency);
-%         k=0;
-%         scaleFactor = 1;
-%         continue;
-%     end
-    
     while (1)
         
         if pushforward == 1
@@ -94,9 +86,11 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
                 break;
             end
         end
-        %_______Print Information and stop information________
-        fprintf('%5d\t%+.16e\t%.8e\t %d\n', iter, xCurCost, xCurGradNorm, lsiters);
-
+        if ultimatum == 0
+            %_______Print Information and stop information________
+            fprintf('%5d\t%+.16e\t%.8e\t %d\n', iter, xCurCost, xCurGradNorm, lsiters);
+        end
+        
         if (xCurGradNorm < options.tolgradnorm)
             fprintf('Target Reached\n');
             pushforward = 1;
@@ -115,7 +109,7 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
 
         %_______Get Direction___________________________
 
-        p = getDirection(M, xCur, xCurGradient, sHistory,...
+       p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
         
 %         p = -getGradient(problem, xCur);
@@ -147,13 +141,13 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
         xNext = M.retr(xCur, step, 1);
         
         %_______Updating the next iteration_______________
-%         xNextGradient = getGradient(problem, xNext);
-        xNextGradient = problem.gradAlt(xNext, options.discrepency);        
+        xNextGradient = getGradient(problem, xNext);
+%         xNextGradient = problem.gradAlt(xNext, options.discrepency);        
         
-        sk = M.isotransp(xCur, xNext, step);
+        sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.isotransp(xCur, xNext, xCurGradient));
-
+            -1, M.transp(xCur, xNext, xCurGradient));
+        
         inner_sk_yk = M.inner(xNext, yk, sk);
         arbconst = 0;
         if (inner_sk_yk /M.inner(xNext, sk, sk))> arbconst * xCurGradNorm
@@ -161,8 +155,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
             if (k>= options.memory)
                 for  i = 2:options.memory
-                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
                 end
                 sHistory = sHistory([2:end 1]);
                 sHistory{options.memory} = sk;
@@ -172,8 +166,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
                 rhoHistory{options.memory} = rhok;
             else
                 for  i = 1:k
-                    sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                    yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                    sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                    yHistory{i} = M.transp(xCur, xNext, yHistory{i});
                 end
                 sHistory{k+1} = sk;
                 yHistory{k+1} = yk;
@@ -182,8 +176,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
             k = k+1;
         else
             for  i = 1:min(k,options.memory)
-                sHistory{i} = M.isotransp(xCur, xNext, sHistory{i});
-                yHistory{i} = M.isotransp(xCur, xNext, yHistory{i});
+                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
             end
         end
 
@@ -192,7 +186,7 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
         xCurGradient = xNextGradient;
         xCurGradNorm = M.norm(xCur, xNextGradient);
         xCurCost = xNextCost;
-        
+      
         savestats()
     end
     
