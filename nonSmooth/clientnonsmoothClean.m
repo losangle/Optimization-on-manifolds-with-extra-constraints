@@ -45,8 +45,6 @@ function clientnonsmoothClean
 % %     problem.grad = subgrad;
 %     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
 
-
-
     profile off;
     profile report
 
