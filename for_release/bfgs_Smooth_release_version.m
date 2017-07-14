@@ -2,11 +2,16 @@
 %  To write a manual
 % Output info structs (Add acceptness)
 % options adda function handle for  >theta(x) accept the step inequality
+% To fix memory == 0, 1, Inf case
+% Delete other linesearch versions.
+% Initialstepsize is not 1 actually.
+% lsstats
+% maxsteps in linesearch is supposed to be in options.
 
 function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, xCur, options)
 % Riemannian BFGS solver for smooth objective function.
 %
-% function [x, cost, info, options] =  bfgsSmooth(problem)
+% function [x, cost, info, options] = bfgsSmooth(problem)
 % function [x, cost, info, options] = bfgsSmooth(problem, x0)
 % function [x, cost, info, options] = bfgsSmooth(problem, x0, options)
 % function [x, cost, info, options] = bfgsSmooth(problem, [], options)
@@ -78,52 +83,21 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %       The algorithm terminates if maxtime seconds elapsed.
 %	miniter (3)
 %       Minimum number of outer iterations (used only if useRand is true).
-%	mininner (1)
-%       Minimum number of inner iterations (for tCG).
-%	maxinner (problem.M.dim() : the manifold's dimension)
-%       Maximum number of inner iterations (for tCG).
-%	Delta_bar (problem.M.typicaldist() or sqrt(problem.M.dim()))
-%       Maximum trust-region radius. If you specify this parameter but not
-%       Delta0, then Delta0 will be set to 1/8 times this parameter.
-%   Delta0 (Delta_bar/8)
-%       Initial trust-region radius. If you observe a long plateau at the
-%       beginning of the convergence plot (gradient norm VS iteration), it
-%       may pay off to try to tune this parameter to shorten the plateau.
-%       You should not set this parameter without setting Delta_bar too (at
-%       a larger value).
-%	useRand (false)
-%       Set to true if the trust-region solve is to be initiated with a
-%       random tangent vector. If set to true, no preconditioner will be
-%       used. This option is set to true in some scenarios to escape saddle
-%       points, but is otherwise seldom activated.
-%	kappa (0.1)
-%       tCG inner kappa convergence tolerance.
-%       kappa > 0 is the linear convergence target rate: tCG will terminate
-%       early if the residual was reduced by a factor of kappa.
-%	theta (1.0)
-%       tCG inner theta convergence tolerance.
-%       1+theta (theta between 0 and 1) is the superlinear convergence
-%       target rate. tCG will terminate early if the residual was reduced
-%       by a power of 1+theta.
-%	rho_prime (0.1)
-%       Accept/reject threshold : if rho is at least rho_prime, the outer
-%       iteration is accepted. Otherwise, it is rejected. In case it is
-%       rejected, the trust-region radius will have been decreased.
-%       To ensure this, rho_prime >= 0 must be strictly smaller than 1/4.
-%       If rho_prime is negative, the algorithm is not guaranteed to
-%       produce monotonically decreasing cost values. It is strongly
-%       recommended to set rho_prime > 0, to aid convergence.
-%   rho_regularization (1e3)
-%       Close to convergence, evaluating the performance ratio rho is
-%       numerically challenging. Meanwhile, close to convergence, the
-%       quadratic model should be a good fit and the steps should be
-%       accepted. Regularization lets rho go to 1 as the model decrease and
-%       the actual decrease go to zero. Set this option to zero to disable
-%       regularization (not recommended). See in-code for the specifics.
-%       When this is not zero, it may happen that the iterates produced are
-%       not monotonically improving the cost when very close to
-%       convergence. This is because the corrected cost improvement could
-%       change sign if it is negative but very small.
+%   minstepsize (1e-10)
+%     The minimum norm of the tangent vector that points from the current
+%     point to the next point. If the norm is less than minstepsize, the 
+%     program will terminate.
+%   memory(30)
+%     The number of previous iterations the program remembers in LBFGS. This is used 
+%     to approximate the Hessian at the current point. Because of difficulty
+%     of maintaining a representation of hessian in terms of coordinates, and
+%     thus a recursive computation for the direction pointing to the next
+%     point is done by considering approximating Hessian as an operator that takes
+%     a vector and outputs a vector in the tangent space. Theoretically, a
+%     vector recurse back memory size number of times and thus memory size 
+%     is linear with the time taken to compute directions towards the next
+%     point.
+%     It can take any value >= 0, or Inf (which is effectively RBFGS).
 %   statsfun (none)
 %       Function handle to a function that will be called after each
 %       iteration to provide the opportunity to log additional statistics.
@@ -221,63 +195,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 % Change log: 
 %
 %   NB April 3, 2013:
-%       tCG now returns the Hessian along the returned direction eta, so
-%       that we do not compute that Hessian redundantly: some savings at
-%       each iteration. Similarly, if the useRand flag is on, we spare an
-%       extra Hessian computation at each outer iteration too, owing to
-%       some modifications in the Cauchy point section of the code specific
-%       to useRand = true.
-%
-%   NB Aug. 22, 2013:
-%       This function is now Octave compatible. The transition called for
-%       two changes which would otherwise not be advisable. (1) tic/toc is
-%       now used as is, as opposed to the safer way:
-%       t = tic(); elapsed = toc(t);
-%       And (2), the (formerly inner) function savestats was moved outside
-%       the main function to not be nested anymore. This is arguably less
-%       elegant, but Octave does not (and likely will not) support nested
-%       functions.
-%
-%   NB Dec. 2, 2013:
-%       The in-code documentation was largely revised and expanded.
-%
-%   NB Dec. 2, 2013:
-%       The former heuristic which triggered when rhonum was very small and
-%       forced rho = 1 has been replaced by a smoother heuristic which
-%       consists in regularizing rhonum and rhoden before computing their
-%       ratio. It is tunable via options.rho_regularization. Furthermore,
-%       the solver now detects if tCG did not obtain a model decrease
-%       (which is theoretically impossible but may happen because of
-%       numerical errors and/or because of a nonlinear/nonsymmetric Hessian
-%       operator, which is the case for finite difference approximations).
-%       When such an anomaly is detected, the step is rejected and the
-%       trust region radius is decreased.
-%       Feb. 18, 2015 note: this is less useful now, as tCG now guarantees
-%       model decrease even for the finite difference approximation of the
-%       Hessian. It is still useful in case of numerical errors, but this
-%       is less stringent.
-%
-%   NB Dec. 3, 2013:
-%       The stepsize is now registered at each iteration, at a small
-%       additional cost. The defaults for Delta_bar and Delta0 are better
-%       defined. Setting Delta_bar in the options will automatically set
-%       Delta0 accordingly. In Manopt 1.0.4, the defaults for these options
-%       were not treated appropriately because of an incorrect use of the
-%       isfield() built-in function.
-%
-%   NB Feb. 18, 2015:
-%       Added some comments. Also, Octave now supports safe tic/toc usage,
-%       so we reverted the changes to use that again (see Aug. 22, 2013 log
-%       entry).
-%
-%   NB April 3, 2015:
-%       Works with the new StoreDB class system.
-%
-%   NB April 8, 2015:
-%       No Hessian warning if approximate Hessian explicitly available.
-%
-%   NB Nov. 1, 2016:
-%       Now uses approximate gradient via finite differences if need be.
+%       
 
 
 
@@ -351,9 +269,10 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     info(1) = stats;
     info(min(10000, options.maxiter+1)).iter = [];
    
-
+    if options.verbosity >= 2
     fprintf(' iter\t               cost val\t                 grad. norm\t        alpha \n');
-
+    end
+    
     while (1)
 %------------------------ROUTINE----------------------------
 
