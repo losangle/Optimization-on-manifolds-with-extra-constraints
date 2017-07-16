@@ -1,3 +1,7 @@
+% TO DO List: 
+% To write comments
+% Isotransp
+
 function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, xCur, options)
 % Riemannian BFGS solver for smooth objective function.
 %
@@ -387,13 +391,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 
 end
 
-% BFGS step, look at Wen's paper for details, it is equivalent
-% to transporting all the way back to the tangent spaces
-% of previous points and to the operation if isotransp is
-% enforced, but in practice, there is no observed difference
-% in them, if your problem requires isotransp, it may be good
-% to replace transp with isotransp. There are built in isotransp
-% for sphere and Obliquefactory
+% BFGS step, look at Wen's paper 
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
     q = xCurGradient;
     inner_s_q = cell(1, k);
