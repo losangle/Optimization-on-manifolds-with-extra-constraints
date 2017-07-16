@@ -125,7 +125,7 @@ problem.egrad = grad;
 
 %Set options
 options.linesearchVersion = 0;
-options.memory = 30;
+options.memory = 1;
 
 xCur = problem.M.rand();
 
@@ -145,7 +145,7 @@ profile on;
 %     ylabel('Norm of the gradient of f');
 
 % 
-bfgsClean(problem,xCur,options);
+bfgs_Smooth_release_version(problem);
 %conjugategradient(problem, xCur,options);
 % cacheSave(problem,xCur,options);
 % 
