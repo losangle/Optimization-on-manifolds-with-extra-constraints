@@ -11,14 +11,14 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     
     localdefaults.minstepsize = 1e-50;
     localdefaults.maxiter = 10000;
-    localdefaults.tolgradnorm = 1e-3;  %iterimgradnorm that is used during discrepency < maxdiscrepency
-    localdefaults.finalgradnorm = 1e-3;
+    localdefaults.tolgradnorm = 1e-4;  %iterimgradnorm that is used during discrepency < maxdiscrepency
+    localdefaults.finalgradnorm = 1e-10;
     localdefaults.memory = 30;
     localdefaults.c1 = 0.0; 
     localdefaults.c2 = 0.5;
     localdefaults.discrepency = 1e-4;
     localdefaults.discrepencydownscalefactor = 1e-1; 
-    localdefaults.maxdiscrepency = 1e-4;
+    localdefaults.maxdiscrepency = 1e-10;
     localdefaults.lsmaxcounter = 50;
     
     % Merge global and local defaults, then merge w/ user options, if any.
@@ -231,7 +231,7 @@ end
 
 
 function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
-    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
+%     df0 = M.inner(xCur, problem.reallygrad(xCur), d);
     if df0 >=0
         fprintf('LS failure by wrong direction');
         t = 1;

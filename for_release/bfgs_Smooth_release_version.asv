@@ -1,6 +1,4 @@
-% TO DO List: 
-% To write comments
-% Isotransp
+% Build in ultimatum
 
 function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, xCur, options)
 % Riemannian BFGS solver for smooth objective function.
@@ -17,11 +15,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %
 %
 % For a description of the algorithm and theorems offering convergence
-% guarantees, see the references below. Documentation for this solver is
-% available online at:
-%
-% # http://www.manopt.org/solver_documentation_trustregions.html
-%
+% guarantees, see the references below.
 %
 % The initial iterate is xCur if it is provided. Otherwise, a random point on
 % the manifold is picked. To specify options whilst not specifying an
@@ -238,6 +232,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     lsstats = [];
+    ultimatum = 0;
     
     % Save stats in a struct array info, and preallocate.
     stats = savestats();
@@ -266,12 +261,17 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
         
         % If none triggered, run specific stopping criterion check
         if ~stop && stats.stepsize < options.minstepsize
-            stop = true;
-            reason = sprintf(['Last stepsize smaller than minimum '  ...
-                'allowed; options.minstepsize = %g.'], ...
-                options.minstepsize);
-        end
-        
+            if ultimatum == 0
+                fprintf('stepsize is too small, restart the bfgs procedure'...
+                
+                k = 0;
+            else
+                stop = true;
+                reason = sprintf(['Last stepsize smaller than minimum '  ...
+                    'allowed; options.minstepsize = %g.'], ...
+                    options.minstepsize);
+            end
+        end  
         if stop
             if options.verbosity >= 1
                 fprintf([reason '\n']);
@@ -391,7 +391,13 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 
 end
 
-% BFGS step, look at Wen's paper 
+% BFGS step, look at Wen's paper for details, it is equivalent
+% to transporting all the way back to the tangent spaces
+% of previous points and to the operation if isotransp is
+% enforced, but in practice, there is no observed difference
+% in them, if your problem requires isotransp, it may be good
+% to replace transp with isotransp. There are built in isotransp
+% for sphere and Obliquefactory
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
     q = xCurGradient;
     inner_s_q = cell(1, k);

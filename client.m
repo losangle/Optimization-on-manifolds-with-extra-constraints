@@ -124,8 +124,6 @@ problem.cost  = cost;
 problem.egrad = grad;
 
 %Set options
-options.linesearchVersion = 0;
-options.memory = 1;
 
 xCur = problem.M.rand();
 
