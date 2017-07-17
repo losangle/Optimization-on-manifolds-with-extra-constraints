@@ -1,3 +1,5 @@
+% Build in ultimatum
+
 function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, xCur, options)
 % Riemannian BFGS solver for smooth objective function.
 %
@@ -13,11 +15,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %
 %
 % For a description of the algorithm and theorems offering convergence
-% guarantees, see the references below. Documentation for this solver is
-% available online at:
-%
-% # http://www.manopt.org/solver_documentation_trustregions.html
-%
+% guarantees, see the references below.
 %
 % The initial iterate is xCur if it is provided. Otherwise, a random point on
 % the manifold is picked. To specify options whilst not specifying an
@@ -176,7 +174,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     localdefaults.minstepsize = 1e-10;
     localdefaults.maxiter = 1000;
     localdefaults.tolgradnorm = 1e-6;
-    localdefaults.memory = 0;
+    localdefaults.memory = 30;
     localdefaults.strict_inc_func = @(x) x;
     localdefaults.max_iter_line_search = 25;
     
@@ -234,6 +232,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     lsstats = [];
+    ultimatum = 0;
     
     % Save stats in a struct array info, and preallocate.
     stats = savestats();
@@ -261,12 +260,23 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
             info, iter+1);
         
         % If none triggered, run specific stopping criterion check
-        if ~stop && stats.stepsize < options.minstepsize
-            stop = true;
-            reason = sprintf(['Last stepsize smaller than minimum '  ...
-                'allowed; options.minstepsize = %g.'], ...
-                options.minstepsize);
-        end
+        if ~stop 
+            if stats.stepsize < options.minstepsize
+                if ultimatum == 0
+                    fprintf(['stepsize is too small, restart the bfgs procedure' ...
+                        'with the current point\n']);
+                    k = 0;
+                    ultimatum = 1;
+                else
+                    stop = true;
+                    reason = sprintf(['Last stepsize smaller than minimum '  ...
+                        'allowed; options.minstepsize = %g.'], ...
+                        options.minstepsize);
+                end
+            else
+                ultimatum = 0;
+            end
+        end  
         
         if stop
             if options.verbosity >= 1
