@@ -1,7 +1,7 @@
 function client_pca_bfgs
 %     rng(161616);
-    Dim = 500;
-    dim = 10;
+    Dim = 2;
+    dim = 1;
     N_in = 500;
     N_out = 500;
     discrepencyAcc = 1e-13;
@@ -44,14 +44,14 @@ function client_pca_bfgs
     [U_start, S_start, V_start] = svd(X);
     VCur = U_start(:, 1: dim);
     
-    [v, cost, info, options] = steepestdescent(problem, VCur, options);
-    figure
-    h = logspace(-15, 1, 501);
-    vals = zeros(1, 501);
-    for iter = 1:501
-        vals(1,iter) = problem.M.norm(v, subgradFun(v, X, h(iter)));
-    end
-    loglog(h, vals)
+%     [v, cost, info, options] = steepestdescent(problem, VCur, options);
+%     figure
+%     h = logspace(-15, 1, 501);
+%     vals = zeros(1, 501);
+%     for iter = 1:501
+%         vals(1,iter) = problem.M.norm(v, subgradFun(v, X, h(iter)));
+%     end
+%     loglog(h, vals)
     
     profile clear
     profile on
