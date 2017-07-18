@@ -1,8 +1,0 @@
-function B
-    M = spherefactory(10);
-    x1 = M.rand();
-    x2 = M.rand();
-    v1 = M.randvec(x1);
-    v2 = M.randvec(x1);
-    M.inner(
-end

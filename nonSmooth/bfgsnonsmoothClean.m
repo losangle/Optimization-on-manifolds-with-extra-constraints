@@ -16,7 +16,7 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     localdefaults.memory = 30;
     localdefaults.c1 = 0.0; 
     localdefaults.c2 = 0.5;
-    localdefaults.discrepency = 1e-4;
+    localdefaults.discrepency = 1e-2;
     localdefaults.discrepencydownscalefactor = 1e-1; 
     localdefaults.maxdiscrepency = 1e-10;
     localdefaults.lsmaxcounter = 50;
@@ -28,8 +28,8 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
     end
     options = mergeOptions(localdefaults, options);
    
-    xCurGradient = getGradient(problem, xCur);
-%     xCurGradient = problem.gradAlt(xCur, options.discrepency);
+%     xCurGradient = getGradient(problem, xCur);
+    xCurGradient = problem.gradAlt(xCur, options.discrepency);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     xCurCost = getCost(problem, xCur);
     
@@ -141,9 +141,9 @@ function [stats, finalX] = bfgsnonsmoothClean(problem, x, options)
         xNext = M.retr(xCur, step, 1);
         
         %_______Updating the next iteration_______________
-        xNextGradient = getGradient(problem, xNext);
-%         xNextGradient = problem.gradAlt(xNext, options.discrepency);        
-        
+%         xNextGradient = getGradient(problem, xNext);
+        xNextGradient = problem.gradAlt(xNext, options.discrepency);        
+         
         sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
             -1, M.transp(xCur, xNext, xCurGradient));
@@ -231,15 +231,15 @@ end
 
 
 function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
-%     df0 = M.inner(xCur, problem.reallygrad(xCur), d);
-    if df0 >=0
-        fprintf('LS failure by wrong direction');
-        t = 1;
-        fail = 1;
-        costNext = inf;
-        lsiters = -1;
-        return
-    end
+%    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
+%     if M.inner(xCur, problem.reallygrad(xCur), d) >=0
+%         fprintf('LS failure by wrong direction');
+%         t = 1;
+%         fail = 1;
+%         costNext = inf;
+%         lsiters = -1;
+%         return
+%     end
     alpha = 0;
     fail = 0;
     beta = inf;
