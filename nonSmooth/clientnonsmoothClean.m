@@ -28,9 +28,11 @@ function clientnonsmoothClean
     profile clear;
     profile on;
 
-    [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
-%     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
+%     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
+    [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
     
+    profile off;
+    profile report
     
     figure
     h = logspace(-15, 1, 501);
@@ -47,8 +49,7 @@ function clientnonsmoothClean
 % %     problem.grad = subgrad;
 %     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
 
-    profile off;
-    profile report
+
 
     displaystats(stats)
     drawsphere(X, d);
@@ -65,6 +66,7 @@ function clientnonsmoothClean
             discrepency = 1e-5;
         end
         counter = 0;
+        max_total_counter = 1000;
         pairs = [];
         Inner = X.'*X;
         m = size(Inner, 1);
@@ -79,6 +81,7 @@ function clientnonsmoothClean
                 end
             end
         end
+        counter = min(counter, max_total_counter);
         grads = cell(1, counter);
         for iterator = 1 : counter
             val = zeros(size(X));
@@ -88,6 +91,7 @@ function clientnonsmoothClean
             val(:, pair(1, 2)) = X(:, pair(1, 1)) - Innerprod*X(:,pair(1, 2));
             grads{iterator} = val;
         end
+        fprintf('counter is %d', counter);
         [u_norm, coeffs, u] = smallestinconvexhull(M, X, grads, min(discrepency, 1e-15));
     end
 
