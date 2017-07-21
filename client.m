@@ -109,6 +109,7 @@ for graphs = 1 : tests
 end
 
 %%
+ rng(111)
 dim = 1000;
 A = randn(dim,dim);
 A = A + A.';
@@ -128,8 +129,8 @@ problem.egrad = grad;
 xCur = problem.M.rand();
 
 
-profile clear;
-profile on;
+% profile clear;
+% profile on;
 % 
 %  [x, cost, info, options] = bfgsCautious(problem,xCur,options);
 % % 
@@ -141,9 +142,12 @@ profile on;
 %     semilogy([info.iter], [info.gradnorm], '.-');
 %     xlabel('Iteration number - BFGSManifold');
 %     ylabel('Norm of the gradient of f');
-
 % 
-bfgs_Smooth_release_version(problem);
+options.memory = 30;
+xCur = problem.M.rand();
+rlbfgs(problem, xCur, options);
+trustregions(problem, xCur);
+% bfgs_smooth_for_release(problem, xCur, options);
 %conjugategradient(problem, xCur,options);
 % cacheSave(problem,xCur,options);
 % 
@@ -162,8 +166,8 @@ bfgs_Smooth_release_version(problem);
 %     xlabel('Iteration number - TrustRegion');
 %     ylabel('Norm of the gradient of f');
 
-profile off;
-profile report
+% profile off;
+% profile report
 
 
 %% Euclidean Case
@@ -180,9 +184,9 @@ problem.cost  = cost;
 problem.egrad = grad;
 
 xCur = problem.M.rand();
-options = [];
 
-[xCur, xCurCost, info, options]=bfgsSmooth(problem,xCur,options);
+
+[xCur, xCurCost, info, options]=rlbfgs(problem,xCur,options);
 
 figure;
 semilogy([info.iter], [info.gradnorm], '.-');

@@ -1,39 +1,33 @@
-% Build in ultimatum
-
-function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, xCur, options)
+function [x, cost, info, options] = rlbfgs(problem, x0, options)
 % Riemannian BFGS solver for smooth objective function.
 %
-% function [x, cost, info, options] = bfgsSmooth(problem)
-% function [x, cost, info, options] = bfgsSmooth(problem, x0)
-% function [x, cost, info, options] = bfgsSmooth(problem, x0, options)
-% function [x, cost, info, options] = bfgsSmooth(problem, [], options)
+% function [x, cost, info, options] = rlbfgs(problem)
+% function [x, cost, info, options] = rlbfgs(problem, x0)
+% function [x, cost, info, options] = rlbfgs(problem, x0, options)
+% function [x, cost, info, options] = rlbfgs(problem, [], options)
 %
 %
-% This is Riemannian BFGS solver (quasi-Newton method), which aims to
-% minimize the cost function in problem structure problem.cost. It needs 
-% gradient of the cost function.
+% This is Riemannian Limited memory BFGS solver (quasi-Newton method), 
+% which aims to minimize the cost function in problem structure problem.cost. 
+% It needs gradient of the cost function. There is an filed in options called
+% options.memory to specifiy the memory size (number of iteration that the 
+% algorithm remembers), and for non-limited memory, simply put options.memory = Inf
 %
 %
 % For a description of the algorithm and theorems offering convergence
 % guarantees, see the references below.
 %
-% The initial iterate is xCur if it is provided. Otherwise, a random point on
+% The initial iterate is x0 if it is provided. Otherwise, a random point on
 % the manifold is picked. To specify options whilst not specifying an
-% initial iterate, give xCur as [] (the empty matrix).
+% initial iterate, give x0 as [] (the empty matrix).
 %
-% The two outputs 'xCur' and 'xCurcost' are the last reached point on the manifold
-% and its cost. Notice that x is not necessarily the best reached point,
-% because this solver is not forced to be a descent method. In particular,
-% very close to convergence, it is sometimes preferable to accept very
-% slight increases in the cost value (on the order of the machine epsilon)
-% in the process of reaching fine convergence. In practice, this is not a
-% limiting factor, as normally one does not need fine enough convergence
-% that this becomes an issue.
+% The two outputs 'x' and 'cost' are the last reached point on the manifold
+% and its cost. 
 % 
 % The output 'info' is a struct-array which contains information about the
 % iterations:
 %   iter (integer)
-%       The (outer) iteration number, or number of steps considered
+%       The iteration number, or number of steps considered
 %       (whether accepted or rejected). The initial guess is 0.
 %	cost (double)
 %       The corresponding cost value.
@@ -66,16 +60,14 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %       algorithm may end up iterating forever (or at least until another
 %       stopping criterion triggers).
 %   maxiter (1000)
-%       The algorithm terminates if maxiter (outer) iterations were executed.
+%       The algorithm terminates if maxiter iterations were executed.
 %   maxtime (Inf)
 %       The algorithm terminates if maxtime seconds elapsed.
-%	miniter (3)
-%       Minimum number of outer iterations (used only if useRand is true).
 %   minstepsize (1e-10)
 %     The minimum norm of the tangent vector that points from the current
 %     point to the next point. If the norm is less than minstepsize, the 
 %     program will terminate.
-%   memory(30)
+%   memory (30)
 %     The number of previous iterations the program remembers in LBFGS. This is used 
 %     to approximate the Hessian at the current point. Because of difficulty
 %     of maintaining a representation of hessian in terms of coordinates, and
@@ -85,8 +77,16 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %     vector recurse back memory size number of times and thus memory size 
 %     is linear with the time taken to compute directions towards the next
 %     point.
-%     It can take any value >= 0, or Inf (which will then take value maxiter).
-%   strict_inc_func(@(x) x)
+%     It can take any value >= 0, or Inf (which will then take value options.maxiter. If
+%     options.maxiter has value Inf, then it will take value 10000 with
+%     warning displayed).
+%   linesearch (@linesearch_hint)
+%       Function handle to a line search function. The options structure is
+%       passed to the line search too, so you can pass it parameters. See
+%       each line search's documentation for info.
+%       By default, the intial multiplier tried is alpha = 1. This can be changed
+%       with options.linesearch: see the documentation of linesearch_hint.
+%   strict_inc_func (@(x) x)
 %     The Cautious step needs a real function that has value 0 at x = 0, and 
 %     strictly increasing. See details in Wen Huang's paper
 %     "A Riemannian BFGS Method without Differentiated Retraction for 
@@ -115,26 +115,17 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 %       that these additional computations appear in the algorithm timings
 %       too, and may interfere with operations such as counting the number
 %       of cost evaluations, etc. (the debug calls get storedb too).
-%   storedepth (20)
+%   storedepth (30)
 %       Maximum number of different points x of the manifold for which a
 %       store structure will be kept in memory in the storedb. If the
 %       caching features of Manopt are not used, this is irrelevant. If
 %       memory usage is an issue, you may try to lower this number.
 %       Profiling may then help to investigate if a performance hit was
-%       incured as a result.
-%
-% Notice that statsfun is called with the point x that was reached last,
-% after the accept/reject decision. Hence: if the step was accepted, we get
-% that new x, with a store which only saw the call for the cost and for the
-% gradient. If the step was rejected, we get the same x as previously, with
-% the store structure containing everything that was computed at that point
-% (possibly including previous rejects at that same point). Hence, statsfun
-% should not be used in conjunction with the store to count operations for
-% example. Instead, you should use storedb's shared memory for such
-% purposes (either via storedb.shared, or via store.shared, see
-% online documentation). It is however possible to use statsfun with the
-% store to compute, for example, other merit functions on the point x
-% (other than the actual cost function, that is).
+%       incurred as a result.
+% 
+%       For a comment about how the info struct-array and statsfun interact 
+%       with the notion of accepted / rejected step, see the documention of 
+%       trustregions.
 %
 %
 % Please cite the Manopt paper as well as the research paper:
@@ -149,10 +140,13 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
 
 
 % This file is part of Manopt: www.manopt.org.
+% Original author: Changshuo Liu, July 19, 2017.
+% Contributors: Nicolas Boumal
 % Change log: 
 %
-%   CL July 15, 2017:
+%   CL, NB July 19, 2017:
 %        Finished the first released version
+
 
     % Verify that the problem description is sufficient for the solver.
     if ~canGetCost(problem)
@@ -164,9 +158,10 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
         % explicitly given in the problem description, as in that case the user
         % seems to be aware of the issue.
         warning('manopt:getGradient:approx', ...
-            ['No gradient provided. The correctness is not garanteed.\n'....
-              'The program is not designed for approximating gradient.\n' ...
-            'To disable this warning: warning(''off'', ''manopt:getGradient:approx'')']);
+               ['No gradient provided. Using an FD approximation instead (slow).\n' ...
+                'This algorithm is not designed to work with inexact gradient: behavior not guaranteed.\n' ...
+                'It may be necessary to increase options.tolgradnorm.\n' ...
+                'To disable this warning: warning(''off'', ''manopt:getGradient:approx'')']);
         problem.approxgrad = approxgradientFD(problem);
     end
     
@@ -176,7 +171,9 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     localdefaults.tolgradnorm = 1e-6;
     localdefaults.memory = 30;
     localdefaults.strict_inc_func = @(x) x;
-    localdefaults.max_iter_line_search = 25;
+    localdefaults.ls_max_steps  = 25;
+    localdefaults.storedepth = 30;
+    localdefaults.linesearch = @linesearch_hint;
     
     % Merge global and local defaults, then merge w/ user options, if any.
     localdefaults = mergeOptions(getGlobalDefaults(), localdefaults);
@@ -186,18 +183,26 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     options = mergeOptions(localdefaults, options);
     
     % To make sure memory in range [0, Inf)
-    if options.memory < 0
-        options.memory = 0;
-    elseif options.memory == Inf
-        options.memory = options.maxiter;
+    options.memory = max(options.memory, 0);
+    if options.memory == Inf
+        if isinf(options.maxiter)
+            options.memory = 10000;
+            warning('rlbfgs:memory',['options.memory and options.maxiter'...
+                'are both Inf. This might be too greedy. '...
+                'options.memory is now limited to 10000']);
+        else
+            options.memory = options.maxiter;
+        end
     end
     
     M = problem.M;
     
     % Create a random starting point if no starting point
     % is provided.
-    if ~exist('xCur','var')|| isempty(xCur)
+    if ~exist('x0', 'var')|| isempty(x0)
         xCur = M.rand(); 
+    else
+        xCur = x0;
     end
     
     timetic = tic();
@@ -207,31 +212,45 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     key = storedb.getNewKey();
     
     % __________Initialization of variables______________
-    % number of current element in memory
+    % Number of iterations since the last restart
     k = 0;  
-    %number of total iteration in BFGS
+    % Number of total iteration in BFGS
     iter = 0; 
-    % saves vector that represents x_{k}'s projection on 
-    % x_{k+1}'s tangent space. And transport it to most
-    % current point's tangent space after every iteration.
+    % Saves step vectors that points to x_{t+1} from x_{t}
+    % for t in range (max(0, iter - min{k, options.memory}), iter].
+    % That is, saves up to options.memory number of most 
+    % current step vectors. 
+    % However, the implementation below does not need stepvectors 
+    % in their respective tangent spaces at x_{t}'s, but rather, having 
+    % them transported to the most current point's tangent space by vector tranport.
+    % For detail of the requirement on the the vector tranport, see the reference. 
+    % In implementation, those step vectors are iteratively 
+    % transported to most current point's tangent space after every iteration.
+    % So at every iteration, it will have this list of vectors in tangent plane
+    % of current point.
     sHistory = cell(1, options.memory);
-    % saves gradient of x_{k} by transporting it to  
-    % x_{k+1}'s tangent space. And transport it to most
-    % current point's tangent space after every iteration.
+    % Saves the difference between gradient of x_{t+1} and the
+    % gradient of x_{t} by transported to x_{t+1}'s tangent space.
+    % where t is in range (max(0, iter - min{k, options.memory}), iter].
+    % That is, saves up to options.memory number of most 
+    % current gradient differences.
+    % The implementation process is similar to sHistory.
     yHistory = cell(1, options.memory);
-    % saves inner(sk,yk)
+    % rhoHistory{t} is the innerproduct of sHistory{t} and yHistory{t}
     rhoHistory = cell(1, options.memory);
-    % scaling of direction given by getDirection for acceptable step
+    % Scaling of direction given by getDirection for acceptable step
     alpha = 1; 
-    % scaling of initial matrix, BB.
+    % Scaling of initial matrix, Barzilai-Borwein.
     scaleFactor = 1;
-    % norm of the step
+    % Norm of the step
     stepsize = 1;
+    % Boolean for whether the step is accepted by Cautious update check
     accepted = 1;
-    xCurGradient = getGradient(problem, xCur, storedb, key);
+    
+    [xCurCost, xCurGradient] = getCostGrad(problem, xCur, storedb, key);
     xCurGradNorm = M.norm(xCur, xCurGradient);
-    xCurCost = getCost(problem, xCur);
     lsstats = [];
+    %A variable to control restarting scheme, see comment below.
     ultimatum = 0;
     
     % Save stats in a struct array info, and preallocate.
@@ -240,7 +259,7 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
     info(min(10000, options.maxiter+1)).iter = [];
     
     if options.verbosity >= 2
-    fprintf(' iter\t               cost val\t                 grad. norm\t        alpha \n');
+        fprintf(' iter\t               cost val\t                 grad. norm\t        alpha \n');
     end
     
     while (1)
@@ -262,9 +281,17 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
         % If none triggered, run specific stopping criterion check
         if ~stop 
             if stats.stepsize < options.minstepsize
+                % To avoid infinite loop and to push the search further
+                % in case BFGS approximation of Hessian is off towards
+                % the end, we erase the memory by setting k = 0;
+                % In this way, it starts off like a steepest descent.
+                % If even steepest descent does not work, then it is 
+                % hopeless and we will terminate.
                 if ultimatum == 0
-                    fprintf(['stepsize is too small, restart the bfgs procedure' ...
-                        'with the current point\n']);
+                    if (options.verbosity >= 2)
+                        fprintf(['stepsize is too small, restart the bfgs procedure' ...
+                            'with the current point\n']);
+                    end
                     k = 0;
                     ultimatum = 1;
                 else
@@ -291,30 +318,33 @@ function [xCur, xCurCost, info, options] = bfgs_Smooth_release_version(problem, 
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
 
         %_______Line Search____________________________
-        [alpha, xNext, xNextCost, lsstats] = linesearchArmijo_start_with_alpha_eq_one(problem,...
-            xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options.max_iter_line_search); 
-        step = M.lincomb(xCur, alpha, p);
-        stepsize = M.norm(xCur, p)*alpha;
-
+        [stepsize, xNext, newkey, lsstats] = ...
+            linesearch_hint(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options, storedb, key);
         
-        %_______Updating the next iteration_______________
-        newkey = storedb.getNewKey();
+        alpha = stepsize/M.norm(xCur, p);
+        step = M.lincomb(xCur, alpha, p);
+        
+        
+%          _______Updating the next iteration_______________
+        xNextCost = getCost(problem, xNext, storedb, newkey);
         xNextGradient = getGradient(problem, xNext, storedb, newkey);
+%         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, key);
         sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
             -1, M.transp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
+        inner_sk_sk = M.inner(xNext, sk, sk);
         % If cautious step is not accepted, then we do no take the
         % current sk, yk into account. Otherwise, we record it 
         % and use it in approximating hessian.
         % sk, yk are maintained in the most recent point's 
         % tangent space by transport.
-        if (inner_sk_yk / M.inner(xNext, sk, sk))>= options.strict_inc_func(xCurGradNorm)
+        if inner_sk_sk ~= 0 && (inner_sk_yk / M.inner(xNext, sk, sk))>= options.strict_inc_func(xCurGradNorm)
             accepted = 1;
             rhok = 1/inner_sk_yk;
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
-            if (k>= options.memory)
+            if (k >= options.memory)
                 % sk and yk are saved from 1 to the end
                 % with the most currently recorded to the 
                 % rightmost hand side of the cells that are
