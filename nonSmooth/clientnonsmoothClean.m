@@ -1,6 +1,8 @@
 function clientnonsmoothClean
-
-    rng(161616);
+clear all;
+close all;
+clc;
+    rng(7141981);
     d = 3;
     n = 24;
     % Create the problem structure.
@@ -10,19 +12,19 @@ function clientnonsmoothClean
     
     cost = @(X) costFun(X);
     subgrad = @(X) subgradFun(manifold, X, discrepency);
-    subgradAlt = @(X, discre) subgradFun(manifold, X, discre);
+    subgradTwoNorm = @(X, discre, handle) subgradFun(manifold, X, discre);
     subgradPnorm = @(X, discre, handle) subgradFunPnorm(manifold, X, discre, handle);
     gradFunc = @(X) gradFun(X);
     
 
     % Define the problem cost function and its Euclidean gradient.
     problem.cost  = cost;
-    problem.grad = subgrad;
-    problem.gradAlt = subgradAlt;
-    problem.subgradPnorm = subgradPnorm;
-    problem.reallygrad = gradFunc;
+    problem.grad = gradFunc;
+%     problem.subgrad = subgradTwoNorm;
+    problem.subgrad= subgradPnorm;
 
-%     checkgradient(problem);
+
+     checkgradient(problem);
 
     %Set options
     xCur = problem.M.rand();
@@ -32,7 +34,7 @@ function clientnonsmoothClean
 %     profile on;
 
 
-        [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options)
+    [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options)
 %     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
 %     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
     
@@ -142,8 +144,11 @@ function clientnonsmoothClean
         i = mod(pos-1,m)+1;
         j = floor((pos-1)/m)+1;
         val = zeros(size(X));
-        val(:,i) = X(:,j);
-        val(:,j) = X(:,i);
+%         val(:,i) = X(:,j);
+%         val(:,j) = X(:,i);
+        Innerprod = X(:, i).'*X(:, j);
+        val(:, i) = X(:, j) - Innerprod*X(:,i);
+        val(:, j) = X(:, i) - Innerprod*X(:,j);
     end
 
     function drawsphere(X, dim)

@@ -69,7 +69,7 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
    
     
     P_operator = @(v) P_operate(M, xCur, v, sHistory, yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-    xCurGradient = problem.subgradPnorm(xCur, options.epsilon, P_operator);
+    xCurGradient = problem.subgrad(xCur, options.epsilon, P_operator);
     xCurCost = getCost(problem, xCur);
     xCurGradNorm = M.norm(xCur, xCurGradient);
     lsstats = [];
@@ -128,7 +128,7 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
             end
         end  
         
-        if (stop && stop~= 2) || xCurGradNorm == 0
+        if (stop && stop~= 2) || xCurGradNorm == 0 || options.epsilon <=1e-7
             if options.verbosity >= 1
                 fprintf([reason '\n']);
             end
@@ -140,13 +140,18 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
             options.delta = options.delta * options.theta_delta;
             fprintf('epsilon is now %.16e', options.epsilon);
             P_operator = @(v) P_operate(M, xCur, v, sHistory, yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-            xCurGradient = problem.subgradPnorm(xCur, options.epsilon, P_operator);
+            xCurGradient = problem.subgrad(xCur, options.epsilon, P_operator);
             xCurGradNorm = M.norm(xCur, xCurGradient);
             continue;
         end
 
         %--------------------Get Direction-----------------------
-
+        if (isnan(xCurGradient))
+            k = 0;
+            P_operator = @(v) P_operate(M, xCur, v, sHistory, yHistory, rhoHistory, scaleFactor, min(k, options.memory));
+            xCurGradient = problem.subgrad(xCur, options.epsilon, P_operator);
+            xCurGradNorm = M.norm(xCur, xCurGradient);
+        end
         Pg = P_operate(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
         
@@ -160,7 +165,7 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
         if fail
             k = 0;
             P_operator = @(v) P_operate(M, xCur, v, sHistory, yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-            xCurGradient = problem.subgradPnorm(xCur, options.epsilon, P_operator);
+            xCurGradient = problem.subgrad(xCur, options.epsilon, P_operator);
             xCurGradNorm = M.norm(xCur, xCurGradient);
             continue;
         end
@@ -172,7 +177,7 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
         
         %----------------Updating the next iteration---------------
         sk = M.transp(xCur, xNext, step);
-        yk = M.lincomb(xNext, 1, problem.reallygrad(xNext),...
+        yk = M.lincomb(xNext, 1, getGradient(problem, xNext),...
             -1, M.transp(xCur, xNext, xCurGradient));
         ys_over_yy = M.inner(xNext, yk, sk)/M.inner(xNext, yk, yk);
         sk = M.lincomb(xNext, 1, sk, max(0, options.ys_over_yy_bound - ys_over_yy), yk);
@@ -215,7 +220,7 @@ function [x, cost, info, options] = bfgsnonsmoothwen(problem, x0, options)
         
         
         P_operator = @(v) P_operate(M, xNext, v, sHistory, yHistory, rhoHistory, scaleFactor, min(k, options.memory));
-        xNextGradient = problem.subgradPnorm(xNext, options.epsilon, P_operator);
+        xNextGradient = problem.subgrad(xNext, options.epsilon, P_operator);
         xNextCost = getCost(problem, xNext);
         xNextGradNorm = M.norm(xNext, xNextGradient);
         
@@ -294,15 +299,15 @@ end
 
 
 function [xNext, costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
-%    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
-%     if M.inner(xCur, problem.reallygrad(xCur), d) >=0
-%         fprintf('LS failure by wrong direction');
-%         t = 1;
-%         fail = 1;
-%         costNext = inf;
-%         lsiters = -1;
-%         return
-%     end
+    if M.inner(xCur, getGradient(problem,xCur), d) >=0
+        fprintf('LS failure by wrong direction');
+        t = 1;
+        fail = 1;
+        costNext = inf;
+        lsiters = -1;
+        xNext = xCur;
+        return
+    end
     alpha = 0;
     fail = 0;
     beta = inf;
@@ -342,6 +347,5 @@ function slope = diffretractionOblique(problem, M, alpha, p, xCur, xNext)
         diffretr(:,i) = (d-alpha*dInner*xCur(:, i)) /sqrt((1+dInner * alpha^2)^3);
     end
     %Can be optimized.
-    slope = M.inner(xNext, problem.reallygrad(xNext), diffretr);
-%     slope = M.inner(xNext, getGradient(problem, xNext), diffretr);
+    slope = M.inner(xNext, getGradient(problem, xNext), diffretr);
 end
