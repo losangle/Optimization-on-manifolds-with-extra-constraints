@@ -338,7 +338,7 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         % and use it in approximating hessian.
         % sk, yk are maintained in the most recent point's 
         % tangent space by transport.
-        if inner_sk_sk ~= 0 && (inner_sk_yk / M.inner(xNext, sk, sk))>= options.strict_inc_func(xCurGradNorm)
+        if inner_sk_sk ~= 0 && (inner_sk_yk / inner_sk_sk)>= options.strict_inc_func(xCurGradNorm)
             accepted = 1;
             rhok = 1/inner_sk_yk;
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
@@ -384,7 +384,7 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         xCur = xNext;
         key = newkey;
         xCurGradient = xNextGradient;
-        xCurGradNorm = M.norm(xCur, xNextGradient);
+        xCurGradNorm = M.norm(xNext, xNextGradient);
         xCurCost = xNextCost;
         
         % Make sure we don't use too much memory for the store database
