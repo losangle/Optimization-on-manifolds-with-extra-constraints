@@ -232,14 +232,14 @@ end
 
 function [costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
 %    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
-    if M.inner(xCur, problem.reallygrad(xCur), d) >=0
-        fprintf('LS failure by wrong direction');
-        t = 1;
-        fail = 1;
-        costNext = inf;
-        lsiters = -1;
-        return
-    end
+%     if M.inner(xCur, problem.reallygrad(xCur), d) >=0
+%         fprintf('LS failure by wrong direction');
+%         t = 1;
+%         fail = 1;
+%         costNext = inf;
+%         lsiters = -1;
+%         return
+%     end
     alpha = 0;
     fail = 0;
     beta = inf;

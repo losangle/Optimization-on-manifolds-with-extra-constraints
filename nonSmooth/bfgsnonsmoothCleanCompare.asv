@@ -194,11 +194,10 @@ function [stats, finalX] = bfgsnonsmoothCleanCompare(problem, x, options)
         else
             k = 0;
             fprintf('sk_yk >0, restrat\n')
-            k = 0;
-            scaleFactor = stepsize*2/xCurGradNorm;
-            P_operator = @(v) P_operate(M, xCur, v, sHistory, yHistory, rhoHistory, scaleFactor, k);
-            xCurGradient = problem.subgradPnorm(xCur, options.discrepency, P_operator);
-            xCurGradNorm = M.norm(xCur, xCurGradient);
+            for  i = 1:min(k,options.memory)
+                sHistory{i} = M.transp(xCur, xNext, sHistory{i});
+                yHistory{i} = M.transp(xCur, xNext, yHistory{i});
+            end
         end
 
         iter = iter + 1;
