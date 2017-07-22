@@ -87,7 +87,7 @@ function [u_norm, coeffs, u, nonposdef] = smallestinconvexhullpnorm(M, x, U, tol
     end
     
     % If grammatrix is not posdef, then cost will be negative;
-    nonposdef = cost_opt < 0;
+    nonposdef = cost_opt < -1e-10;
 
     function gram_Matrix = grammatrixPnorm(M, x, vectors, P_operator)
         N_elt = numel(vectors);
