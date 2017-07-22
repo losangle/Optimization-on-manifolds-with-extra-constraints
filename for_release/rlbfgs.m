@@ -263,7 +263,7 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
     end
     
     while (1)
-%------------------------ROUTINE----------------------------
+        %------------------------ROUTINE----------------------------
 
         % Display iteration information
         if options.verbosity >= 2
@@ -312,12 +312,12 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
             break;
         end
 
-        %_______Get Direction___________________________
+        %--------------------Get Direction-----------------------
 
         p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
 
-        %_______Line Search____________________________
+        %--------------------Line Search--------------------------
         [stepsize, xNext, newkey, lsstats] = ...
             linesearch_hint(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options, storedb, key);
         
@@ -325,7 +325,7 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         step = M.lincomb(xCur, alpha, p);
         
         
-%          _______Updating the next iteration_______________
+        %----------------Updating the next iteration---------------
         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, newkey);
         sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
@@ -397,7 +397,6 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         
     end
 
-    
     info = info(1:iter+1);
     x = xCur;
     cost = xCurCost;
@@ -436,7 +435,7 @@ end
 % or expensive to enforce. However, in practice, there is no observed difference
 % in them, if your problem requires isotransp, it may be good
 % to replace transp with isotransp. There are built in isotransp
-% for sphere and obliquefactory
+% for spherefactory and obliquefactory
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
     q = xCurGradient;
     inner_s_q = zeros(1, k);
