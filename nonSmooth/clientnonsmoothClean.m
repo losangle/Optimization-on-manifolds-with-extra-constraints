@@ -28,14 +28,16 @@ function clientnonsmoothClean
     xCur = problem.M.rand();
     options = [];
 
-    profile clear;
-    profile on;
+%     profile clear;
+%     profile on;
 
-    [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
+
+        [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options)
+%     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
 %     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
     
-    profile off;
-    profile report
+%     profile off;
+%     profile report
     
     figure
     h = logspace(-15, 1, 101);
@@ -52,9 +54,7 @@ function clientnonsmoothClean
 % %     problem.grad = subgrad;
 %     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
 
-
-
-    displaystats(stats)
+    displayinfo(stats)
     drawsphere(X, d);
 
 
@@ -146,9 +146,6 @@ function clientnonsmoothClean
         val(:,j) = X(:,i);
     end
 
-
-
-
     function drawsphere(X, dim)
         maxdot = costFun(X);
         
@@ -180,6 +177,38 @@ function clientnonsmoothClean
             hold off;
         end
     end
+
+    function displayinfo(stats)
+        finalcost = stats(end).cost;
+        for numcost = 1 : length([stats.cost])
+            stats(numcost).cost = stats(numcost).cost - finalcost;
+        end
+        
+        figure;
+        subplot(2,2,1)
+        semilogy([stats.gradnorm], '.-');
+        xlabel('Iter');
+        ylabel('GradNorms');
+        
+        titletest = sprintf('Time: %f', stats(end).time);
+        title(titletest);
+        
+        subplot(2,2,2)
+        plot([stats.alpha], '.-');
+        xlabel('Iter');
+        ylabel('Alphas');
+        
+        subplot(2,2,3)
+        semilogy([stats.stepsize], '.-');
+        xlabel('Iter');
+        ylabel('stepsizes');
+        
+        subplot(2,2,4)
+        semilogy([stats.cost], '.-');
+        xlabel('Iter');
+        ylabel('costs');
+    end
+
 
     function displaystats(stats)
         
