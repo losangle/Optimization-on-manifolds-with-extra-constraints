@@ -1,47 +1,59 @@
-function clientnonsmoothClean
-clear all;
-close all;
-clc;
-%     rng(7141981);
-    d = 3;
-    n = 24;
-    % Create the problem structure.
-    manifold = obliquefactory(d,n);
-    problem.M = manifold;
-    discrepency = 1e-6;
+function testprox
+dim = 3;
+npoints = 8;
+M = obliquefactory(dim, npoints);
+% M = spherefactory(3);
+problem.M = M;
+% fixedpoint = M.rand();
+regcost = @(X, Y, lambda) regcostFun (M, X, Y, lambda);
+reggradOblique = @(X, Y, lambda) reggradFunOblique(M, X, Y, lambda);
+% reggradSphere = @(X, Y) reggradFunSphere(M, X, Y);
+
+problem.regcost = regcost;
+problem.reggrad = reggradOblique;
+% problem.grad = gradSphere;
+
+problem.cost = @(X) costFun(X);
+problem.grad = @(X) gradFun(X);
+
+% checkgradient(problem);
+
+    x0 = problem.M.rand();
+    options.maxiter = 10000;
     
-    cost = @(X) costFun(X);
-    subgrad = @(X) subgradFun(manifold, X, discrepency);
-    subgradTwoNorm = @(X, discre, handle) subgradFun(manifold, X, discre);
-    subgradPnorm = @(X, discre, handle) subgradFunPnorm(manifold, X, discre, handle);
-    gradFunc = @(X) gradFun(X);
+    [X, cost, stats, options] = rlbfgsprox(problem, x0, options);
     
-
-    % Define the problem cost function and its Euclidean gradient.
-    problem.cost  = cost;
-    problem.grad = gradFunc;
-%     problem.subgrad = subgradTwoNorm;
-    problem.subgrad= subgradPnorm;
-
-
-     checkgradient(problem);
-
-    %Set options
-    xCur = problem.M.rand();
-    options.tolgradnorm = 1e-12;
-    options.memory = 10000;
-    options.maxiter = 100000;
-%     profile clear;
-%     profile on;
-
-
-%     [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options)
-%     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
-%     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
-    [X, cost, stats, options] = rlbfgsns(problem, xCur, options)
-    surfprofile(problem, X, problem.M.randvec(X), problem.M.randvec(X))
-%     profile off;
-%     profile report
+    figure
+    subplot(2,3,1);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,2);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,3);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,4);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,5);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,6);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    
+    
+    l = 1e-3;
+    figure
+    subplot(2,3,1);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    subplot(2,3,2);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    subplot(2,3,3);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    subplot(2,3,4);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    subplot(2,3,5);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    subplot(2,3,6);
+    plotprofile(problem, X, M.randvec(X), linspace(-l,l,101));
+    
+    
     
     figure
     h = logspace(-15, 1, 101);
@@ -51,16 +63,42 @@ clc;
     end
     loglog(h, vals)
     
-%     A(problem, X);
-    
-%     options.discrepency = options.discrepency/10;
-% %     subgrad = @(X) subgradFun(manifold, X, discrepency);
-% %     problem.grad = subgrad;
-%     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
-
     displayinfo(stats)
-    drawsphere(X, d);
+    drawsphere(X, dim);
 
+
+    function val = regcostFun(M, X, Y, lambda)
+        val = M.dist(X, Y)^2;
+        val = val * lambda;
+    end
+
+    function val = reggradFunOblique(M, X, Y, lambda)
+        [n, m] = size(X);
+        val = zeros(n, m);
+        for col = 1: m
+            xydiff = X(:, col)-Y(:, col);
+            normdiff = norm(xydiff);
+            if normdiff ~= 0
+                valcol = xydiff/(normdiff*sqrt(1-normdiff^2/4));
+                d = real(2*asin(.5*normdiff));
+                val(:, col) = 2 * valcol * d;
+            end
+        end
+        inners = sum(X.*val, 1);
+        val = val - bsxfun(@times, X, inners);
+        val = val * lambda;
+    end
+    
+    function val = reggradFunSphere(M, X, Y)
+        dist = M.dist(X,Y);
+        xydiff = X - Y;
+        normdiff = norm(X-Y);
+        if normdiff ~= 0
+            val = xydiff/(normdiff*sqrt(1-normdiff^2/4));
+            val = val * 2 * dist;
+            val = val - X*(X(:).'*val(:));
+        end
+    end
 
     function val = costFun(X)
         Inner = X.'*X;
@@ -146,8 +184,6 @@ clc;
         i = mod(pos-1, m)+1;
         j = floor((pos-1)/m)+1;
         val = zeros(size(X));
-%         val(:,i) = X(:,j);
-%         val(:,j) = X(:,i);
         Innerprod = X(:, i).'*X(:, j);
         val(:, i) = X(:, j) - Innerprod*X(:,i);
         val(:, j) = X(:, i) - Innerprod*X(:,j);
@@ -247,5 +283,5 @@ clc;
         xlabel('Iter');
         ylabel('costs');
     end
-end
 
+end

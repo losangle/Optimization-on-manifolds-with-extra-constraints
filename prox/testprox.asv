@@ -1,42 +1,22 @@
-function clientnonsmoothClean
+function testprox
+M = obliquefactory(3,4);
+% M = spherefactory(3);
+problem.M = M;
+% fixedpoint = M.rand();
+regcost = @(X, Y) regcostFun (M, X, Y);
+reggradOblique = @(X, Y) reggradFunOblique(M, X, Y);
+% gradSphere = @(X, Y) reggradFunSphere(M, X, Y);
 
-    rng(161616);
-    d = 3;
-    n = 24;
-    % Create the problem structure.
-    manifold = obliquefactory(d,n);
-    problem.M = manifold;
-    discrepency = 1e-6;
+problem.cost = @(X) costFun(X);
+problem.grad = @(X) gradFun(X);
+
+% checkgradient(problem);
+
+    x0 = problem.M.rand();
+    options.maxiter = 10000;
     
-    cost = @(X) costFun(X);
-    subgrad = @(X) subgradFun(manifold, X, discrepency);
-    subgradAlt = @(X, discre) subgradFun(manifold, X, discre);
-    subgradPnorm = @(X, discre, handle) subgradFunPnorm(manifold, X, discre, handle);
-    gradFunc = @(X) gradFun(X);
-    
+    [X, cost, stats, options] = rlbfgsprox(problem, x0, options);
 
-    % Define the problem cost function and its Euclidean gradient.
-    problem.cost  = cost;
-    problem.grad = subgrad;
-    problem.gradAlt = subgradAlt;
-    problem.subgradPnorm = subgradPnorm;
-    problem.reallygrad = gradFunc;
-
-%     checkgradient(problem);
-
-    %Set options
-    xCur = problem.M.rand();
-    options = [];
-
-    profile clear;
-    profile on;
-
-    [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
-%     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
-    
-    profile off;
-    profile report
-    
     figure
     h = logspace(-15, 1, 101);
     vals = zeros(1, 101);
@@ -45,18 +25,40 @@ function clientnonsmoothClean
     end
     loglog(h, vals)
     
-%     A(problem, X);
-    
-%     options.discrepency = options.discrepency/10;
-% %     subgrad = @(X) subgradFun(manifold, X, discrepency);
-% %     problem.grad = subgrad;
-%     [stats, X]  = bfgsnonsmoothClean(problem, X, options);
-
-
-
-    displaystats(stats)
+    displayinfo(stats)
     drawsphere(X, d);
 
+
+    function val = regcostFun(M, X, Y)
+        val = M.dist(X, Y)^2;
+    end
+
+    function val = reggradFunOblique(M, X, Y)
+        [n, m] = size(X);
+        val = zeros(n, m);
+        for col = 1: m
+            xydiff = X(:, col)-Y(:, col);
+            normdiff = norm(xydiff);
+            if normdiff ~= 0
+                valcol = xydiff/(normdiff*sqrt(1-normdiff^2/4));
+                d = real(2*asin(.5*normdiff));
+                val(:, col) = 2 * valcol * d;
+            end
+        end
+        inners = sum(X.*val, 1);
+        val = val - bsxfun(@times, X, inners);
+    end
+    
+    function val = reggradFunSphere(M, X, Y)
+        dist = M.dist(X,Y);
+        xydiff = X - Y;
+        normdiff = norm(X-Y);
+        if normdiff ~= 0
+            val = xydiff/(normdiff*sqrt(1-normdiff^2/4));
+            val = val * 2 * dist;
+            val = val - X*(X(:).'*val(:));
+        end
+    end
 
     function val = costFun(X)
         Inner = X.'*X;
@@ -139,15 +141,13 @@ function clientnonsmoothClean
         m = size(Inner,1);
         Inner(1:m+1:end) = -2;
         [maxval,pos] = max(Inner(:));
-        i = mod(pos-1,m)+1;
+        i = mod(pos-1, m)+1;
         j = floor((pos-1)/m)+1;
         val = zeros(size(X));
-        val(:,i) = X(:,j);
-        val(:,j) = X(:,i);
+        Innerprod = X(:, i).'*X(:, j);
+        val(:, i) = X(:, j) - Innerprod*X(:,i);
+        val(:, j) = X(:, i) - Innerprod*X(:,j);
     end
-
-
-
 
     function drawsphere(X, dim)
         maxdot = costFun(X);
@@ -181,6 +181,37 @@ function clientnonsmoothClean
         end
     end
 
+    function displayinfo(stats)
+        finalcost = stats(end).cost;
+        for numcost = 1 : length([stats.cost])
+            stats(numcost).cost = stats(numcost).cost - finalcost;
+        end
+        
+        figure;
+        subplot(2,2,1)
+        semilogy([stats.gradnorm], '.-');
+        xlabel('Iter');
+        ylabel('GradNorms');
+        
+        titletest = sprintf('Time: %f', stats(end).time);
+        title(titletest);
+%         
+%         subplot(2,2,2)
+%         plot([stats.alpha], '.-');
+%         xlabel('Iter');
+%         ylabel('Alphas');
+        
+        subplot(2,2,3)
+        semilogy([stats.stepsize], '.-');
+        xlabel('Iter');
+        ylabel('stepsizes');
+        
+        subplot(2,2,4)
+        semilogy([stats.cost], '.-');
+        xlabel('Iter');
+        ylabel('costs');
+    end
+
     function displaystats(stats)
         
         finalcost = stats.costs(end);
@@ -212,5 +243,5 @@ function clientnonsmoothClean
         xlabel('Iter');
         ylabel('costs');
     end
-end
 
+end

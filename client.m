@@ -109,8 +109,9 @@ for graphs = 1 : tests
 end
 
 %%
+clear all; clc; close all;
  rng(111)
-dim = 1000;
+dim = 100;
 A = randn(dim,dim);
 A = A + A.';
 cost = @(x) (x'*A*x);
@@ -129,8 +130,8 @@ problem.egrad = grad;
 xCur = problem.M.rand();
 
 
-% profile clear;
-% profile on;
+profile clear;
+profile on;
 % 
 %  [x, cost, info, options] = bfgsCautious(problem,xCur,options);
 % % 
@@ -145,8 +146,9 @@ xCur = problem.M.rand();
 % 
 options.memory = 30;
 xCur = problem.M.rand();
+
 rlbfgs(problem, xCur, options);
-trustregions(problem, xCur);
+% trustregions(problem, xCur);
 % bfgs_smooth_for_release(problem, xCur, options);
 %conjugategradient(problem, xCur,options);
 % cacheSave(problem,xCur,options);
@@ -166,8 +168,8 @@ trustregions(problem, xCur);
 %     xlabel('Iteration number - TrustRegion');
 %     ylabel('Norm of the gradient of f');
 
-% profile off;
-% profile report
+profile off;
+profile report
 
 
 %% Euclidean Case
