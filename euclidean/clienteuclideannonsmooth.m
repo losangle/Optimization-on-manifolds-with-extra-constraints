@@ -1,7 +1,7 @@
 function clienteuclideannonsmooth
 
     dim = 2;
-    w = 10;
+    w = 100;
     cost = @(x) (1-x(2))^2+w*abs(x(2)-x(1)^2);
     grad = @(x) [sign(x(2)-x(1)^2)*w*(-2*x(1)); sign(x(2)-x(1)^2)*w-2*(1-x(2))];
     
@@ -19,10 +19,12 @@ function clienteuclideannonsmooth
 %     bfgsSmooth(problem, x, options);
 %     trustregions(problem, x, options);
 %   [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmoothlm(problem,x,options);
-%      [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmooth(problem,x,options);
-    [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, x, options);
+     [gradnorms, alphas, stepsizes, costs, xCur, time] = euclideannonsmooth(problem,x,options);
+%     [gradnorms, alphas, stepsizes, costs, xCur, time] = bfgsnonsmooth(problem, x, options);
+     [xLate, cost, info, options] = blockbfgs(problem, x, options);
 
     disp(xCur)
+    disp(xLate)
     figure;
     
     subplot(2,2,1)

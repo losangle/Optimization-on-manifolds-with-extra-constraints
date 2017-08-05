@@ -147,7 +147,19 @@ profile on;
 options.memory = 30;
 xCur = problem.M.rand();
 
-rlbfgs(problem, xCur, options);
+[x, cost, info, options] = rlbfgs(problem, xCur, options);
+    figure;
+    semilogy([info.iter], [info.gradnorm], '.-');
+    xlabel('Iteration number - BFGSIsometric');
+    ylabel('Norm of the gradient of f');
+    hold on
+    
+%     [x, cost, info, options] = frogbfgs(problem, xCur, options);
+    [x, cost, info, options] = blockbfgv1(problem, xCur, options);
+
+    semilogy([info.iter], [info.gradnorm], '.-');
+    hold off
+
 % trustregions(problem, xCur);
 % bfgs_smooth_for_release(problem, xCur, options);
 %conjugategradient(problem, xCur,options);
@@ -174,8 +186,9 @@ profile report
 
 %% Euclidean Case
 dim = 2;
-cost = @(x) (1-x(1))^2+100*(x(2)-x(1)^2)^2;
-grad = @(x) [-2*(1-x(1))+200*(x(2)-x(1)^2)*(-2*x(1));200*(x(2)-x(1)^2)];
+w = 1000;
+cost = @(x) (1-x(1))^2+w*(x(2)-x(1)^2)^2;
+grad = @(x) [-2*(1-x(1))+2*w*(x(2)-x(1)^2)*(-2*x(1));2*w*(x(2)-x(1)^2)];
 
 
 manifold = euclideanfactory(dim);
@@ -187,10 +200,15 @@ problem.egrad = grad;
 
 xCur = problem.M.rand();
 
-
-[xCur, xCurCost, info, options]=rlbfgs(problem,xCur,options);
-
+options = [];
+[x0, xCurCost, info, options]=rlbfgs(problem,xCur,options);
 figure;
 semilogy([info.iter], [info.gradnorm], '.-');
 xlabel('Iteration number ');
 ylabel('Norm of the gradient of f');
+hold on
+
+[x0, xCurCost, info, options] = blockbfgv1(problem, xCur, options);
+
+semilogy([info.iter], [info.gradnorm], '.-');
+hold off

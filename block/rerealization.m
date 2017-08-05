@@ -1,4 +1,4 @@
-function [x, cost, info, options] = rlbfgs(problem, x0, options)
+function [x, cost, info, options] = rerealization(problem, x0, options)
 % Riemannian BFGS solver for smooth objective function.
 %
 % function [x, cost, info, options] = rlbfgs(problem)
@@ -317,19 +317,29 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         p = getDirection(M, xCur, xCurGradient, sHistory,...
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
 
-        %--------------------Line Search--------------------------
+%         --------------------Line Search--------------------------
         [stepsize, xNext, newkey, lsstats] = ...
             linesearch_hint(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options, storedb, key);
         
         alpha = stepsize/M.norm(xCur, p);
         step = M.lincomb(xCur, alpha, p);
+% 
+%         [xNext, costNext, alpha, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), 0.001, 0.6, 40);
+%         step = M.lincomb(xCur, alpha, p);
+%         stepsize = M.norm(xCur, step);
+%         newkey = storedb.getNewKey();
+        
         
         
         %----------------Updating the next iteration---------------
         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, newkey);
         sk = M.transp(xCur, xNext, step);
-        yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+        xFurther = M.retr(xNext, step);
+        xFurtherGrad = getGradient(problem, xFurther);
+        yk = M.lincomb(xNext, 1/2, M.transp(xFurther, xNext, xFurtherGrad),...
+            -1/2, M.transp(xCur, xNext, xCurGradient));
+%       yk = M.lincomb(xNext, 1, xNextGradient,...
+%             -1, M.transp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         inner_sk_sk = M.inner(xNext, sk, sk);
@@ -341,8 +351,8 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         if inner_sk_sk ~= 0 && (inner_sk_yk / inner_sk_sk)>= options.strict_inc_func(xCurGradNorm)
             accepted = 1;
             rhok = 1/inner_sk_yk;
-            scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
-%             scaleFactor = 1;
+%             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
+            scaleFactor = 1;
             if (k>= options.memory)
                 % sk and yk are saved from 1 to the end
                 % with the most currently recorded to the 
@@ -451,3 +461,59 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
     end
     dir = M.lincomb(xCur, -1, r);
 end
+
+
+function [xNext, costNext, t, fail, lsiters] = linesearchnonsmooth(problem, M, xCur, d, f0, df0, c1, c2, max_counter)
+%    df0 = M.inner(xCur, problem.reallygrad(xCur), d);
+%     if M.inner(xCur, problem.reallygrad(xCur), d) >=0
+%         fprintf('LS failure by wrong direction');
+%         t = 1;
+%         fail = 1;
+%         costNext = inf;
+%         lsiters = -1;
+%         return
+%     end
+    alpha = 0;
+    fail = 0;
+    beta = inf;
+    t = 1;
+    counter = max_counter;
+    while counter > 0
+        xNext = M.retr(xCur, d, t);
+        if (getCost(problem, xNext) > f0 + df0*c1*t)
+            beta = t;
+        elseif diffretractionOblique(problem, M, t, d, xCur, xNext) < c2*df0
+            alpha = t;
+        else
+            break;
+        end
+        if (isinf(beta))
+            t = alpha*2;
+        else
+            t = (alpha+beta)/2;
+        end
+        counter = counter - 1;
+    end
+    if counter == 0
+        fprintf('Failed LS \n');
+        fail = 1;
+    end
+    costNext = getCost(problem, xNext);
+    lsiters = max_counter - counter + 1;
+end
+
+
+function slope = diffretractionOblique(problem, M, alpha, p, xCur, xNext)
+    [n, m] = size(p);
+    diffretr = zeros(n, m);
+    for i = 1 : m
+        d = p(:, i);
+        dInner = d.' * d;
+        diffretr(:,i) = (d-alpha*dInner*xCur(:, i)) /sqrt((1+dInner * alpha^2)^3);
+    end
+    %Can be optimized.
+%     slope = M.inner(xNext, problem.reallygrad(xNext), diffretr);
+    slope = M.inner(xNext, getGradient(problem, xNext), diffretr);
+end
+
+

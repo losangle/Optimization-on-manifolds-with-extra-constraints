@@ -1,21 +1,73 @@
-function testprox
-M = obliquefactory(3,4);
-% M = spherefactory(3);
-problem.M = M;
-% fixedpoint = M.rand();
-regcost = @(X, Y) regcostFun (M, X, Y);
-reggradOblique = @(X, Y) reggradFunOblique(M, X, Y);
-% gradSphere = @(X, Y) reggradFunSphere(M, X, Y);
-
-problem.cost = @(X) costFun(X);
-problem.grad = @(X) gradFun(X);
-
-% checkgradient(problem);
-
-    x0 = problem.M.rand();
-    options.maxiter = 10000;
+function clientnonsmoothClean
+clear all;
+close all;
+clc;
+%     rng(7141981);
+    d = 3;
+    n = 24;
+    % Create the problem structure.
+    manifold = obliquefactory(d,n);
+    problem.M = manifold;
+    discrepency = 1e-6;
     
-    [X, cost, stats, options] = rlbfgsprox(problem, x0, options);
+    cost = @(X) costFun(X);
+    subgrad = @(X) subgradFun(manifold, X, discrepency);
+    subgradTwoNorm = @(X, discre, handle) subgradFun(manifold, X, discre);
+    subgradPnorm = @(X, discre, handle) subgradFunPnorm(manifold, X, discre, handle);
+    gradFunc = @(X) gradFun(X);
+    
+
+    % Define the problem cost function and its Euclidean gradient.
+    problem.cost  = cost;
+    problem.grad = gradFunc;
+    
+
+%    checkgradient(problem);
+
+    %Set options
+    xCur = problem.M.rand();
+    
+%     options = [];
+%     profile clear;
+%     profile on;
+%     problem.subgrad = subgradTwoNorm;
+%     fprintf('___________________________Two Norm___________________\n')
+%     [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options);
+% %     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
+% %     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
+%     
+% %     profile off;
+% %     profile report
+%     
+%     figure
+%     h = logspace(-15, 1, 101);
+%     vals = zeros(1, 101);
+%     for iter = 1:101
+%         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
+%     end
+%     loglog(h, vals)
+%     
+%     displayinfo(stats)
+
+    
+    
+%     problem.subgrad= subgradPnorm;
+    problem.subgrad = @(X, discre, handle) gradFun(X);
+    options.partialP = @(k, memory) min(k, memory);
+    fprintf('___________________________P Norm full handle___________________\n')
+    
+%     profile clear;
+%     profile on;
+
+    options.maxiter = 20000;
+%     [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options);
+%     [X, cost, stats, options] = blockbfgs(problem, xCur, options);
+%      [X, cost, stats, options] = rlbfgs(problem, xCur, options);
+%     [X, cost, stats, options] = frogbfgs(problem, xCur, options);
+    [X, cost, stats, options] = rerealization(problem, xCur, options);
+
+%     profile off;
+%     profile report
 
     figure
     h = logspace(-15, 1, 101);
@@ -26,40 +78,62 @@ problem.grad = @(X) gradFun(X);
     loglog(h, vals)
     
     displayinfo(stats)
-    drawsphere(X, d);
+%     displayinfo(info)
+
+    M = problem.M;
+        figure
+    subplot(2,3,1);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,2);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,3);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,4);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,5);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
+    subplot(2,3,6);
+    surfprofile(problem, X, M.randvec(X), M.randvec(X));
 
 
-    function val = regcostFun(M, X, Y)
-        val = M.dist(X, Y)^2;
-    end
 
-    function val = reggradFunOblique(M, X, Y)
-        [n, m] = size(X);
-        val = zeros(n, m);
-        for col = 1: m
-            xydiff = X(:, col)-Y(:, col);
-            normdiff = norm(xydiff);
-            if normdiff ~= 0
-                valcol = xydiff/(normdiff*sqrt(1-normdiff^2/4));
-                d = real(2*asin(.5*normdiff));
-                val(:, col) = 2 * valcol * d;
-            end
+%     problem.subgrad= subgradPnorm;
+%     options =[];
+%     options.partialP = @(k, memory) partialPhandle(k, memory);
+%     fprintf('___________________________P Norm___________________\n')
+%     
+%     profile clear;
+%     profile on;
+% 
+%     
+%     [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options);
+%     
+%     profile off;
+%     profile report
+% 
+%     figure
+%     h = logspace(-15, 1, 101);
+%     vals = zeros(1, 101);
+%     for iter = 1:101
+%         vals(1,iter) = problem.M.norm(X, subgradFun(problem.M, X, h(iter)));
+%     end
+%     loglog(h, vals)
+%     
+%     displayinfo(stats)
+    
+        drawsphere(X, d);
+    
+    
+    function val = partialPhandle(k, memory)
+        l = min(k, memory);
+        if l <= 3
+            val = l;
+        else
+            val = floor(2*sqrt(l));
         end
-        inners = sum(X.*val, 1);
-        val = val - bsxfun(@times, X, inners);
     end
     
-    function val = reggradFunSphere(M, X, Y)
-        dist = M.dist(X,Y);
-        xydiff = X - Y;
-        normdiff = norm(X-Y);
-        if normdiff ~= 0
-            val = xydiff/(normdiff*sqrt(1-normdiff^2/4));
-            val = val * 2 * dist;
-            val = val - X*(X(:).'*val(:));
-        end
-    end
-
+    
     function val = costFun(X)
         Inner = X.'*X;
         Inner(1:size(Inner,1)+1:end) = -2;
@@ -141,9 +215,11 @@ problem.grad = @(X) gradFun(X);
         m = size(Inner,1);
         Inner(1:m+1:end) = -2;
         [maxval,pos] = max(Inner(:));
-        i = mod(pos-1, m)+1;
+        i = mod(pos-1,m)+1;
         j = floor((pos-1)/m)+1;
         val = zeros(size(X));
+%         val(:,i) = X(:,j);
+%         val(:,j) = X(:,i);
         Innerprod = X(:, i).'*X(:, j);
         val(:, i) = X(:, j) - Innerprod*X(:,i);
         val(:, j) = X(:, i) - Innerprod*X(:,j);
@@ -195,11 +271,13 @@ problem.grad = @(X) gradFun(X);
         
         titletest = sprintf('Time: %f', stats(end).time);
         title(titletest);
-%         
-%         subplot(2,2,2)
-%         plot([stats.alpha], '.-');
-%         xlabel('Iter');
-%         ylabel('Alphas');
+        
+        if exist('stats.alphas', 'var') 
+        subplot(2,2,2)
+        plot([stats.alpha], '.-');
+        xlabel('Iter');
+        ylabel('Alphas');
+        end
         
         subplot(2,2,3)
         semilogy([stats.stepsize], '.-');
@@ -211,6 +289,7 @@ problem.grad = @(X) gradFun(X);
         xlabel('Iter');
         ylabel('costs');
     end
+
 
     function displaystats(stats)
         
@@ -228,10 +307,14 @@ problem.grad = @(X) gradFun(X);
         titletest = sprintf('Time: %f', stats.time);
         title(titletest);
         
-        subplot(2,2,2)
-        plot(stats.alphas, '.-');
-        xlabel('Iter');
-        ylabel('Alphas');
+        if exist('stats.alphas', 'var') 
+                subplot(2,2,2)
+                plot(stats.alphas, '.-');
+                xlabel('Iter');
+                ylabel('Alphas');
+        end
+        
+
         
         subplot(2,2,3)
         semilogy(stats.stepsizes, '.-');
@@ -243,5 +326,5 @@ problem.grad = @(X) gradFun(X);
         xlabel('Iter');
         ylabel('costs');
     end
-
 end
+

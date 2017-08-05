@@ -1,5 +1,23 @@
-function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
+function [x, cost, info, options] = rlbfgsinfeasible(problem, x0, options)
 
+
+    % Verify that the problem description is sufficient for the solver.
+    if ~canGetCost(problem)
+        warning('manopt:getCost', ...
+            'No cost provided. The algorithm will likely abort.');
+    end
+    if ~canGetGradient(problem) && ~canGetApproxGradient(problem)
+        % Note: we do not give a warning if an approximate gradient is
+        % explicitly given in the problem description, as in that case the user
+        % seems to be aware of the issue.
+        warning('manopt:getGradient:approx', ...
+               ['No gradient provided. Using an FD approximation instead (slow).\n' ...
+                'This algorithm is not designed to work with inexact gradient: behavior not guaranteed.\n' ...
+                'It may be necessary to increase options.tolgradnorm.\n' ...
+                'To disable this warning: warning(''off'', ''manopt:getGradient:approx'')']);
+        problem.approxgrad = approxgradientFD(problem);
+    end
+    
     % Local defaults for the program
     localdefaults.minstepsize = 1e-10;
     localdefaults.maxiter = 1000;
@@ -51,7 +69,25 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
     k = 0;  
     % Number of total iteration in BFGS
     iter = 0; 
+    % Saves step vectors that points to x_{t+1} from x_{t}
+    % for t in range (max(0, iter - min{k, options.memory}), iter].
+    % That is, saves up to options.memory number of most 
+    % current step vectors. 
+    % However, the implementation below does not need stepvectors 
+    % in their respective tangent spaces at x_{t}'s, but rather, having 
+    % them transported to the most current point's tangent space by vector tranport.
+    % For detail of the requirement on the the vector tranport, see the reference. 
+    % In implementation, those step vectors are iteratively 
+    % transported to most current point's tangent space after every iteration.
+    % So at every iteration, it will have this list of vectors in tangent plane
+    % of current point.
     sHistory = cell(1, options.memory);
+    % Saves the difference between gradient of x_{t+1} and the
+    % gradient of x_{t} by transported to x_{t+1}'s tangent space.
+    % where t is in range (max(0, iter - min{k, options.memory}), iter].
+    % That is, saves up to options.memory number of most 
+    % current gradient differences.
+    % The implementation process is similar to sHistory.
     yHistory = cell(1, options.memory);
     % rhoHistory{t} is the innerproduct of sHistory{t} and yHistory{t}
     rhoHistory = cell(1, options.memory);
@@ -98,6 +134,12 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
         % If none triggered, run specific stopping criterion check
         if ~stop 
             if stats.stepsize < options.minstepsize
+                % To avoid infinite loop and to push the search further
+                % in case BFGS approximation of Hessian is off towards
+                % the end, we erase the memory by setting k = 0;
+                % In this way, it starts off like a steepest descent.
+                % If even steepest descent does not work, then it is 
+                % hopeless and we will terminate.
                 if ultimatum == 0
                     if (options.verbosity >= 2)
                         fprintf(['stepsize is too small, restart the bfgs procedure' ...
@@ -129,22 +171,15 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
             yHistory, rhoHistory, scaleFactor, min(k, options.memory));
 
         %--------------------Line Search--------------------------
-%         [stepsize, xNext, newkey, lsstats] = ...
-%             linesearch_hint(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options, storedb, key);        
-%         
-%         alpha = stepsize/M.norm(xCur, p);
-%         step = M.lincomb(xCur, alpha, p);
+        [stepsize, xNext, newkey, lsstats] = ...
+            linesearch_hint(problem, xCur, p, xCurCost, M.inner(xCur,xCurGradient,p), options, storedb, key);
         
-        [alpha, xNext, xNextCost, lsstats] = ...
-            linesearchArmijo_start_with_alpha_eq_one(problem, xCur, p, xCurCost, M.inner(xCur, xCurGradient, p))
+        alpha = stepsize/M.norm(xCur, p);
         step = M.lincomb(xCur, alpha, p);
-        stepsize = M.norm(xCur, step);
-        newkey = M
+        
         
         %----------------Updating the next iteration---------------
         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, newkey);
-        
-        
         sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...
             -1, M.transp(xCur, xNext, xCurGradient));
@@ -160,6 +195,7 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
             accepted = 1;
             rhok = 1/inner_sk_yk;
             scaleFactor = inner_sk_yk / M.inner(xNext, yk, yk);
+%             scaleFactor = 1;
             if (k>= options.memory)
                 % sk and yk are saved from 1 to the end
                 % with the most currently recorded to the 
@@ -244,6 +280,16 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
 
 end
 
+% BFGS step, see Wen's paper for details. This functon basically takes in
+% a vector g, and operate inverse approximate Hessian P on it to get 
+% Pg, and take negative of it. Due to isometric transport and locking condition
+% (see paper), this implementation operates in tangent spaces of the most
+% recent point instead of transport this vector iteratively backwards to operate 
+% in tangent planes of previous points. Notice that these two conditions are hard
+% or expensive to enforce. However, in practice, there is no observed difference
+% in them, if your problem requires isotransp, it may be good
+% to replace transp with isotransp. There are built in isotransp
+% for spherefactory and obliquefactory
 function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistory, scaleFactor, k)
     q = xCurGradient;
     inner_s_q = zeros(1, k);
@@ -258,51 +304,3 @@ function dir = getDirection(M, xCur, xCurGradient, sHistory, yHistory, rhoHistor
     end
     dir = M.lincomb(xCur, -1, r);
 end
-
-function [alpha, xNext, xNextCost, lsstats] = ...
-                  linesearchArmijo_start_with_alpha_eq_one(problem, x, pivot, d, f0, df0)
-              
-    max_iter_line_search = 40;
-              
-    % Backtracking default parameters. These can be overwritten in the
-    % options structure which is passed to the solver.
-    contraction_factor = .5;
-    suff_decr = 1e-4;
-    
-    % At first, we have no idea of what the step size should be.
-    alpha = 1;
-
-    % Make the chosen step and compute the cost there.
-    xNext = problem.M.retr(x, d, alpha);
-    xNextCost = getCost(problem, xNext);
-    xNextCost = xNextCost + problem.regcost(xNext, pivot);
-    num_cost_eval = 1;
-    
-    % Backtrack while the Armijo criterion is not satisfied
-    while xNextCost > f0 + suff_decr*alpha*df0
-        
-        % Reduce the step size,
-        alpha = contraction_factor * alpha;
-        
-        % and look closer down the line
-        xNext = problem.M.retr(x, d, alpha);
-        xNextCost = getCost(problem, xNext);
-        xNextCost = xNextCost + problem.regcost(xNext, pivot);
-        num_cost_eval = num_cost_eval + 1;
-        
-        % Make sure we don't run out of budget
-        if num_cost_eval >= max_iter_line_search
-            break;
-        end
-        
-    end
-    
-    lsstats.num_cost_eval = num_cost_eval;
-    % If we got here without obtaining a decrease, we reject the step.
-    if xNextCost > f0
-        alpha = 0;
-        xNext = x;
-        xNextCost = f0; 
-    end
-end
-

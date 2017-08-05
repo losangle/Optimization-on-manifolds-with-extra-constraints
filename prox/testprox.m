@@ -19,9 +19,15 @@ problem.grad = @(X) gradFun(X);
 % checkgradient(problem);
 
     x0 = problem.M.rand();
-    options.maxiter = 10000;
+    options.maxiter = 100;
     
-    [X, cost, stats, options] = rlbfgsprox(problem, x0, options);
+    [X, cost, stats, options] = proxmethod(problem, x0, options);
+    
+    
+    Inner = X.'*X;
+    Inner(1:size(Inner,1)+1:end) = -2;
+    sort(Inner(:))
+    
     
     figure
     subplot(2,3,1);

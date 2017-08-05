@@ -126,7 +126,7 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
             break;
         end
 
-        if k>= 100
+        if k>= 10
             k = 0;
             pivot = xCur;
             [xCurCost, xCurGradient] = getCostGrad(problem, xCur, storedb, newkey);
@@ -147,15 +147,15 @@ function [x, cost, info, options] = rlbfgsprox(problem, x0, options)
 %         step = M.lincomb(xCur, alpha, p);
         
         [alpha, xNext, xNextCost, lsstats] = ...
-            linesearchArmijo_start_with_alpha_eq_one(problem, xCur, pivot, p, xCurCost, M.inner(xCur, xCurGradient, p), stepsize);
+            linesearchArmijo_start_with_alpha_eq_one(problem, xCur, pivot, p, xCurCost, M.inner(xCur, xCurGradient, p), iter/10+0.1);
         step = M.lincomb(xCur, alpha, p);
         stepsize = M.norm(xCur, step);
         newkey = storedb.getNewKey();
         
         %----------------Updating the next iteration---------------
         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, newkey);
-        xNextCost = xNextCost + problem.regcost(xNext, pivot, stepsize);
-        xNextGradient = M.lincomb(xNext, 1, xNextGradient, 1, problem.reggrad(xNext, pivot, stepsize));
+        xNextCost = xNextCost + problem.regcost(xNext, pivot, iter/10+0.1);
+        xNextGradient = M.lincomb(xNext, 1, xNextGradient, 1, problem.reggrad(xNext, pivot, iter/10+0.1));
         
         sk = M.transp(xCur, xNext, step);
         yk = M.lincomb(xNext, 1, xNextGradient,...

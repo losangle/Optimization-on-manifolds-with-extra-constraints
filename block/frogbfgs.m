@@ -1,4 +1,4 @@
-function [x, cost, info, options] = rlbfgs(problem, x0, options)
+function [x, cost, info, options] = frogbfgs(problem, x0, options)
 % Riemannian BFGS solver for smooth objective function.
 %
 % function [x, cost, info, options] = rlbfgs(problem)
@@ -328,8 +328,10 @@ function [x, cost, info, options] = rlbfgs(problem, x0, options)
         %----------------Updating the next iteration---------------
         [xNextCost, xNextGradient] = getCostGrad(problem, xNext, storedb, newkey);
         sk = M.transp(xCur, xNext, step);
-        yk = M.lincomb(xNext, 1, xNextGradient,...
-            -1, M.transp(xCur, xNext, xCurGradient));
+        xFurther = M.retr(xNext, sk, 1);
+        xFurtherGradient = getGradient(problem, xFurther);
+        yk = M.lincomb(xNext, 1/2, M.transp(xFurther, xNext, xFurtherGradient),...
+            -1/2, M.transp(xCur, xNext, xCurGradient));
 
         inner_sk_yk = M.inner(xNext, yk, sk);
         inner_sk_sk = M.inner(xNext, sk, sk);

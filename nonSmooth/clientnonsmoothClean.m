@@ -28,8 +28,8 @@ clc;
 
     %Set options
     xCur = problem.M.rand();
-    options.tolgradnorm = 1e-12;
-    options.memory = 10000;
+%     options.tolgradnorm = 1e-12;
+%     options.memory = 10000;
     options.maxiter = 100000;
 %     profile clear;
 %     profile on;
@@ -38,7 +38,8 @@ clc;
 %     [X, cost, stats, options] = bfgsnonsmoothwen(problem, xCur, options)
 %     [stats, X]  = bfgsnonsmoothCleanCompare(problem, xCur, options);
 %     [stats, X]  = bfgsnonsmoothClean(problem, xCur, options);
-    [X, cost, stats, options] = rlbfgsns(problem, xCur, options)
+%     [X, cost, stats, options] = rlbfgsns(problem, xCur, options)
+    [X, cost, stats, options] = rerealization(problem, xCur, options);
     surfprofile(problem, X, problem.M.randvec(X), problem.M.randvec(X))
 %     profile off;
 %     profile report

@@ -1,4 +1,4 @@
-function grad = getGradient(problem, x, storedb, key)
+function grad = getGradientnonsmooth(problem, x, storedb, key)
 % Computes the gradient of the cost function at x.
 %
 % function grad = getGradient(problem, x)
