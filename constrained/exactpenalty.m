@@ -12,7 +12,8 @@ function xfinal = exactpenalty(problem0, x0, options)
         problem.grad = gradfun;
         problem.M = M;
         
-        [xCur, cost, info, options] = rerealization(problem, xCur, options);
+%         [xCur, cost, info, options] = rerealization(problem, xCur, options);
+        [xCur, cost, info, options] = rlbfgs(problem, xCur, options);
         
 %         u1 = [1.2;0];
 %         u2 = [0; 1.2];

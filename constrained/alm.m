@@ -16,7 +16,7 @@ function xfinal = alm(problem0, x0, options)
         problem.M = M;
         options = [];
         
-        [xCur, cost, info, options] = rlbfgs(problem, xCur, options);
+        [xCur, cost, info, options] = rerealization(problem, xCur, options);
         
         for iterineq = 1: totalineq
             costhandler = problem0.ineq_constraint_cost{iterineq};
