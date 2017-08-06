@@ -2,7 +2,7 @@
 % problem0.ineq_constraint_grad is ................................
 % such that all inequalities are >=0.
 
-function logbarrier(problem0, x0, options)
+function xfinal = logbarrier(problem0, x0, options)
     CONSTMAX = 1e200;
     M = problem0.M;
     mu = 0.05;

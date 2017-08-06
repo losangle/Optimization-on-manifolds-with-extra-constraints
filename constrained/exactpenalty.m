@@ -1,7 +1,7 @@
 % problem0.ineq_constraint_cost is a cell of function handle 
 % problem0.ineq_constraint_grad is ................................
 % such that all inequalities are >=0.
-function exactpenalty(problem0, x0, options)
+function xfinal = exactpenalty(problem0, x0, options)
     M = problem0.M;
     mu = 1e-2;
     xCur = x0;
@@ -14,15 +14,17 @@ function exactpenalty(problem0, x0, options)
         
         [xCur, cost, info, options] = rerealization(problem, xCur, options);
         
-        u1 = [1.2;0];
-        u2 = [0; 1.2];
-        surfprofile(problem, [0;0], u1, u2);
-        hold on
-        plot3(xCur(1)/1.2, xCur(2)/1.2, cost_exactpenalty(xCur, problem0, 1/mu), 'r*');
-        hold off
+%         u1 = [1.2;0];
+%         u2 = [0; 1.2];
+%         surfprofile(problem, [0;0], u1, u2);
+%         hold on
+%         plot3(xCur(1)/1.2, xCur(2)/1.2, cost_exactpenalty(xCur, problem0, 1/mu), 'r*');
+%         hold off
         
         mu = mu/2;
     end
+    
+    xfinal = xCur;
 
     function val = cost_exactpenalty(x, problem, u)
         val = getCost(problem, x);

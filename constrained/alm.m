@@ -2,7 +2,7 @@
 % problem0.ineq_constraint_grad is ................................
 % such that all inequalities are >=0.
 
-function alm(problem0, x0, options)
+function xfinal = alm(problem0, x0, options)
     M = problem0.M;
     mu = 0.05;
     xCur = x0;
@@ -17,15 +17,6 @@ function alm(problem0, x0, options)
         options = [];
         
         [xCur, cost, info, options] = rlbfgs(problem, xCur, options);
-        
-%         u1 = [2; 0];
-%         u2 = [0; 2];
-%         surfprofile(problem, [0;0], u1, u2);
-%         hold on
-%         plot3(xCur(1)/2, xCur(2)/2, cost_alm(xCur, problem0, mu, lambdas), 'r*');
-%         hold off
-% 
-%         xCur
         
         for iterineq = 1: totalineq
             costhandler = problem0.ineq_constraint_cost{iterineq};
