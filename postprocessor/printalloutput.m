@@ -1,0 +1,5 @@
+function printalloutput
+
+    
+
+end
